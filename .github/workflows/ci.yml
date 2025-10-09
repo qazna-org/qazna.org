@@ -13,12 +13,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ---- Go (only if there is any .go file) ----
+      # ---- Go ----
       - name: Set up Go
         if: ${{ hashFiles('**/*.go') != '' }}
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.1'
+          go-version: '1.24.x'
           check-latest: true
 
       - name: Go env
@@ -35,7 +35,6 @@ jobs:
           if [ -d "cmd" ]; then
             for d in cmd/*; do
               [ -d "$d" ] || continue
-              # собираем только если пакет main
               if grep -q "package main" "$d"/*.go 2>/dev/null; then
                 name="$(basename "$d")"
                 echo "[go build] $d -> bin/$name"
@@ -44,7 +43,7 @@ jobs:
             done
           fi
 
-      # ---- Rust (only if there is a Cargo.toml under core/) ----
+      # ---- Rust ----
       - name: Set up Rust
         if: ${{ hashFiles('core/**/Cargo.toml') != '' }}
         uses: dtolnay/rust-toolchain@stable
@@ -53,6 +52,7 @@ jobs:
 
       - name: Cargo fmt & check & test
         if: ${{ hashFiles('core/**/Cargo.toml') != '' }}
+        working-directory: core
         run: |
           cargo fmt --all -- --check || true
           cargo check
