@@ -100,16 +100,6 @@ Full details:
 
 ---
 
-## 🧠 Scientific Foundation
-
-Qazna’s emission model is inspired by **biological homeostasis** —  
-the principle that a living organism maintains internal stability through constant dynamic adjustment.
-
-This analogy underpins the **continuous adaptive emission** system,  
-where monetary supply evolves proportionally to real-world productivity and energy efficiency.
-
----
-
 ## 🧰 Development Roadmap
 
 | Phase | Timeline | Goal |
@@ -133,37 +123,26 @@ Security contact: [security@qazna.org](mailto:security@qazna.org)
 
 ---
 
-## 🤝 Contribution
-
-Developers, central banks, and researchers are welcome to participate.  
-All contributions are governed by the **Qazna Contributor License Agreement (CLA)** and must adhere to AGPLv3 / Apache 2.0 rules.
-
-To get started:
-```bash
-git clone https://github.com/qazna-foundation/qazna.org.git
-cd qazna.org
-make build && make run
-
-📊 Transparency
+## 📊 Transparency
 
 Quarterly reports and public dashboards will be published at:
 
 🌐 https://qazna.org/transparency
 
 These include:
-	•	Real-time emission data
-	•	Fee redistribution metrics
-	•	Security and uptime statistics
-	•	Global participation map
+- Real-time emission data  
+- Fee redistribution metrics  
+- Security and uptime statistics  
+- Global participation map
 
-⸻
+---
 
-🕊️ Contact
+## 🕊️ Contact
 
-📧 General inquiries: info@qazna.org
-🔒 Security reports: security@qazna.org
+📧 General inquiries: info@qazna.org  
+🔒 Security reports: security@qazna.org  
 🌐 Website: https://qazna.org
 
-⸻
+---
 
-Qazna Foundation — For a balanced, transparent, and sovereign global economy.
+**Qazna Foundation** — *For a balanced, transparent, and sovereign global economy.*
