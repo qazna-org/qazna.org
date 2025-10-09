@@ -1,0 +1,54 @@
+openapi: 3.0.3
+info:
+  title: Qazna Public API
+  version: 0.1.0
+  description: |
+    Public, versioned API surface for Qazna.org (draft).
+servers:
+  - url: http://localhost:8080
+paths:
+  /healthz:
+    get:
+      summary: Liveness & basic status
+      operationId: getHealth
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service, version]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  service:
+                    type: string
+                    example: qazna-api
+                  version:
+                    type: string
+                    example: 0.1.0
+  /v1/info:
+    get:
+      summary: API info
+      operationId: getInfo
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [name, version, time]
+                properties:
+                  name:
+                    type: string
+                    example: qazna-api
+                  version:
+                    type: string
+                    example: 0.1.0
+                  time:
+                    type: string
+                    format: date-time
+                    example: 2025-10-09T12:00:00Z

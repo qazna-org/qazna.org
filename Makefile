@@ -36,7 +36,13 @@ build:
 		echo "[build] cargo build"; cargo build --release; \
 	else echo "[build] skip rust"; fi
 
+openapi:
+	@echo "[openapi] spec at api/openapi.yaml"
+	@test -f api/openapi.yaml && echo "OK" || (echo "missing openapi.yaml"; exit 1)
+
 proto:
+	@echo "[proto] .proto files under api/proto/"
+	@test -d api/proto && find api/proto -name '*.proto' -print || (echo "missing api/proto"; exit 1)
 	@echo "[proto] placeholder (add protobuf/TLA+ generation here)"
 
 docs:
@@ -47,3 +53,6 @@ docs:
 clean:
 	@rm -rf bin/ dist/ build/ target/
 	@echo "[clean] done"
+
+docker:
+	@docker build -t qazna/api:dev -f cmd/api/Dockerfile .
