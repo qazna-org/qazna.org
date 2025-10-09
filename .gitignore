@@ -2,27 +2,29 @@
 .DS_Store
 
 # Go
-/bin/
-/bin/**/
-/*.exe
+bin/
+*.exe
 *.test
 *.out
 coverage*.txt
 
 # Rust
-/target/
-/Cargo.lock
+target/
+Cargo.lock
+core/target/
+core/Cargo.lock
 
 # Node
 node_modules/
-/dist/
-/build/
+dist/
+build/
 
-# Python (if used for tooling)
+# Python
 .venv/
 __pycache__/
 
 # Editors & logs
 .idea/
+.vscode/
 *.log
 *.swp
