@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Go steps (only if any .go files present)
+      - name: Set up Go
+        if: ${{ hashFiles('**/*.go') != '' }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Go fmt & vet
+        if: ${{ hashFiles('**/*.go') != '' }}
+        run: |
+          go fmt ./...
+          go vet ./...
+
+      - name: Go build
+        if: ${{ hashFiles('**/*.go') != '' }}
+        run: go build ./...
+
+      # Rust steps (only if Cargo.toml present under core/)
+      - name: Set up Rust
+        if: ${{ hashFiles('core/**/Cargo.toml') != '' }}
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo fmt & check
+        if: ${{ hashFiles('core/**/Cargo.toml') != '' }}
+        run: |
+          cargo fmt --all -- --check || true
+          cargo check
+
+      # Markdown link check for README (optional)
+      - name: Markdown link check
+        uses: gaurav-nelson/github-action-markdown-link-check@v1
+        with:
+          use-quiet-mode: 'yes'
+          check-modified-files-only: 'no'
+          file-path: 'README.md'
