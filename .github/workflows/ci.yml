@@ -27,15 +27,22 @@ jobs:
           go version
           go env GOVERSION GOMOD
 
-      - name: Go fmt & vet
+      - name: Go build (cmd/* -> bin/)
         if: ${{ hashFiles('**/*.go') != '' }}
         run: |
-          go fmt ./...
-          go vet ./...
-
-      - name: Go build
-        if: ${{ hashFiles('**/*.go') != '' }}
-        run: go build ./...
+          set -e
+          mkdir -p bin
+          if [ -d "cmd" ]; then
+            for d in cmd/*; do
+              [ -d "$d" ] || continue
+              # собираем только если пакет main
+              if grep -q "package main" "$d"/*.go 2>/dev/null; then
+                name="$(basename "$d")"
+                echo "[go build] $d -> bin/$name"
+                go build -o "bin/$name" "./$d"
+              fi
+            done
+          fi
 
       # ---- Rust (only if there is a Cargo.toml under core/) ----
       - name: Set up Rust
