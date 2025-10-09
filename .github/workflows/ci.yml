@@ -13,11 +13,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ---- Go (only if there is any .go file) ----
       - name: Set up Go
         if: ${{ hashFiles('**/*.go') != '' }}
         uses: actions/setup-go@v5
         with:
-          go-version: 'stable'
+          go-version: '1.24.1'
+          check-latest: true
+
+      - name: Go env
+        if: ${{ hashFiles('**/*.go') != '' }}
+        run: |
+          go version
+          go env GOVERSION GOMOD
 
       - name: Go fmt & vet
         if: ${{ hashFiles('**/*.go') != '' }}
@@ -29,6 +37,7 @@ jobs:
         if: ${{ hashFiles('**/*.go') != '' }}
         run: go build ./...
 
+      # ---- Rust (only if there is a Cargo.toml under core/) ----
       - name: Set up Rust
         if: ${{ hashFiles('core/**/Cargo.toml') != '' }}
         uses: dtolnay/rust-toolchain@stable
