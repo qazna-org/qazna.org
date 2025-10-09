@@ -7,12 +7,12 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ---- Go ----
       - name: Set up Go
         if: ${{ hashFiles('**/*.go') != '' }}
         uses: actions/setup-go@v5
@@ -29,24 +29,15 @@ jobs:
         if: ${{ hashFiles('**/*.go') != '' }}
         run: go build ./...
 
-      # ---- Rust ----
       - name: Set up Rust
         if: ${{ hashFiles('core/**/Cargo.toml') != '' }}
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
 
-      - name: Cargo fmt & check
+      - name: Cargo fmt & check & test
         if: ${{ hashFiles('core/**/Cargo.toml') != '' }}
         run: |
           cargo fmt --all -- --check || true
           cargo check
-
-      # ---- Markdown links (soft-fail) ----
-      - name: Markdown link check (README)
-        uses: gaurav-nelson/github-action-markdown-link-check@v1
-        continue-on-error: true
-        with:
-          use-quiet-mode: 'yes'
-          config-file: '.mlc-config.json'
-          file-path: 'README.md'
+          cargo test -q
