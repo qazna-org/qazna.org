@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+
+# Go
+/bin/
+/bin/**/
+/*.exe
+*.test
+*.out
+coverage*.txt
+
+# Rust
+/target/
+/Cargo.lock
+
+# Node
+node_modules/
+/dist/
+/build/
+
+# Python (if used for tooling)
+.venv/
+__pycache__/
+
+# Editors & logs
+.idea/
+*.log
+*.swp
