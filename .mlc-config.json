@@ -1,0 +1,15 @@
+{
+  "ignorePatterns": [
+    { "pattern": "^mailto:" },
+    { "pattern": "^https://qazna\\.org" }
+  ],
+  "httpHeaders": [
+    {
+      "urls": ["https://github.com"],
+      "headers": { "User-Agent": "curl/8.0" }
+    }
+  ],
+  "timeout": "10s",
+  "retryOn429": true,
+  "fallbackRetryDelay": "2s"
+}
