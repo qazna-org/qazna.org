@@ -1,19 +1,22 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"time"
 
+	"qazna.org/api/spec"
 	"qazna.org/internal/httpapi"
 	"qazna.org/internal/ledger"
 	pgstore "qazna.org/internal/store/pg"
 )
 
 const serviceName = "qazna-api"
-const serviceVersion = "0.4.0"
+const serviceVersion = "0.5.3"
 
 func main() {
 	// Select ledger backend: PostgreSQL (if QAZNA_PG_DSN is set) or in-memory
@@ -38,7 +41,6 @@ func main() {
 	}
 
 	api := httpapi.New(svc)
-
 	mux := http.NewServeMux()
 
 	// ---- System
@@ -55,10 +57,11 @@ func main() {
 		})
 	})
 
-	// ---- OpenAPI (serve file from repo)
+	// ---- OpenAPI (serve embedded bytes from api/spec)
 	mux.HandleFunc("/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/yaml")
-		http.ServeFile(w, r, "api/openapi.yaml")
+		w.Header().Set("Cache-Control", "public, max-age=60")
+		_, _ = w.Write(spec.OpenAPI)
 	})
 	// Redoc documentation
 	mux.HandleFunc("/docs", func(w http.ResponseWriter, r *http.Request) {
@@ -104,15 +107,50 @@ func main() {
 	})
 
 	addr := getenv("QAZNA_API_ADDR", ":8080")
+
+	// --- Middleware chain (Security -> CORS -> MaxBody -> RateLimit -> Logging)
+	handler := httpapi.Logging(
+		httpapi.RateLimit(
+			httpapi.MaxBodyBytes(
+				httpapi.CORS(
+					httpapi.SecurityHeaders(mux),
+				),
+				1<<20, // 1 MiB
+			),
+			100, // burst
+			100, // tokens per second
+		),
+	)
+
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           httpapi.Logging(mux),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	log.Printf("Starting %s %s on %s", serviceName, serviceVersion, addr)
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("server error: %v", err)
+
+	// graceful shutdown
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("server error: %v", err)
+		}
+	}()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt)
+	<-stop
+	log.Println("Shutting down...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("graceful shutdown error: %v", err)
+	} else {
+		log.Println("Server stopped")
 	}
 }
 
@@ -131,7 +169,6 @@ func hasSuffix(s, suf string) bool {
 }
 
 func redocHTML(specPath string) string {
-	// Simple Redoc from CDN
 	return `<!DOCTYPE html>
 <html>
   <head>
