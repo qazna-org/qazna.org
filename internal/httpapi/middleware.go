@@ -1,6 +1,10 @@
 package httpapi
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"log"
 	"net"
 	"net/http"
@@ -13,6 +17,7 @@ import (
 type statusWriter struct {
 	http.ResponseWriter
 	code int
+	n    int // bytes written
 }
 
 func (w *statusWriter) WriteHeader(code int) {
@@ -20,32 +25,105 @@ func (w *statusWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
-// Logging: method, path, status, duration
-func Logging(next http.Handler) http.Handler {
+func (w *statusWriter) Write(p []byte) (int, error) {
+	if w.code == 0 {
+		w.code = http.StatusOK
+	}
+	n, err := w.ResponseWriter.Write(p)
+	w.n += n
+	return n, err
+}
+
+/* =========================
+   Request ID (context)
+   ========================= */
+
+type ctxKey int
+
+const requestIDKey ctxKey = iota
+
+func genID() string {
+	var b [12]byte
+	_, _ = rand.Read(b[:])
+	return hex.EncodeToString(b[:])
+}
+
+func RequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sw := &statusWriter{ResponseWriter: w, code: 200}
-		start := time.Now()
-		next.ServeHTTP(sw, r)
-		d := time.Since(start)
-		log.Printf("%s %s -> %d (%s)", r.Method, r.URL.Path, sw.code, d)
+		rid := r.Header.Get("X-Request-Id")
+		if rid == "" {
+			rid = genID()
+		}
+		// put to response & context
+		w.Header().Set("X-Request-Id", rid)
+		ctx := context.WithValue(r.Context(), requestIDKey, rid)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-// SecurityHeaders: hardening + CSP tuned for ReDoc
+func RequestIDFromContext(ctx context.Context) string {
+	if v := ctx.Value(requestIDKey); v != nil {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+/* =========================
+   JSON logging
+   ========================= */
+
+type logRecord struct {
+	Time       string  `json:"time"`
+	Level      string  `json:"level"`
+	RequestID  string  `json:"request_id,omitempty"`
+	Method     string  `json:"method"`
+	Path       string  `json:"path"`
+	RemoteIP   string  `json:"remote_ip"`
+	Status     int     `json:"status"`
+	DurationMs float64 `json:"duration_ms"`
+	Bytes      int     `json:"bytes"`
+	UserAgent  string  `json:"user_agent,omitempty"`
+	Referer    string  `json:"referer,omitempty"`
+}
+
+func LoggingJSON(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sw := &statusWriter{ResponseWriter: w, code: http.StatusOK}
+		start := time.Now()
+		next.ServeHTTP(sw, r)
+		d := time.Since(start)
+
+		rec := logRecord{
+			Time:       time.Now().UTC().Format(time.RFC3339Nano),
+			Level:      "info",
+			RequestID:  RequestIDFromContext(r.Context()),
+			Method:     r.Method,
+			Path:       r.URL.Path,
+			RemoteIP:   clientIP(r),
+			Status:     sw.code,
+			DurationMs: float64(d.Microseconds()) / 1000.0,
+			Bytes:      sw.n,
+			UserAgent:  r.UserAgent(),
+			Referer:    r.Referer(),
+		}
+		b, _ := json.Marshal(rec)
+		log.Println(string(b))
+	})
+}
+
+/* =========================
+   Security / CORS / Limits
+   ========================= */
+
 func SecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("X-XSS-Protection", "0")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-
-		// CSP:
-		// - script: только self + jsdelivr (ReDoc bundle)
-		// - img: self + data: + cdn.redoc.ly (логотип)
-		// - style: self + inline (ReDoc инлайн-стили)
-		// - connect: self + jsdelivr (sourcemap; безопасно)
-		// - worker: self + blob: (нужен web worker ReDoc)
-		// - frame-ancestors: запрет встраивания
+		// CSP tuned for ReDoc (worker/img/jsdelivr)
 		w.Header().Set("Content-Security-Policy",
 			"default-src 'self'; "+
 				"img-src 'self' data: https://cdn.redoc.ly; "+
@@ -54,23 +132,19 @@ func SecurityHeaders(next http.Handler) http.Handler {
 				"connect-src 'self' https://cdn.jsdelivr.net; "+
 				"worker-src 'self' blob:; "+
 				"frame-ancestors 'none'")
-
 		next.ServeHTTP(w, r)
 	})
 }
 
-// CORS: locked but practical (adjust origins if needed)
 func CORS(next http.Handler) http.Handler {
 	allowedMethods := "GET,POST,OPTIONS"
-	allowedHeaders := "Content-Type,Idempotency-Key"
+	allowedHeaders := "Content-Type,Idempotency-Key,X-Request-Id"
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin != "" {
-			if isLocalOrigin(origin) {
-				w.Header().Set("Access-Control-Allow-Origin", origin)
-				w.Header().Set("Vary", "Origin")
-			}
+		if origin != "" && isLocalOrigin(origin) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
 		}
 		w.Header().Set("Access-Control-Allow-Methods", allowedMethods)
 		w.Header().Set("Access-Control-Allow-Headers", allowedHeaders)
@@ -84,7 +158,6 @@ func CORS(next http.Handler) http.Handler {
 	})
 }
 
-// MaxBodyBytes: limit request body size
 func MaxBodyBytes(next http.Handler, maxBytes int64) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
@@ -92,7 +165,6 @@ func MaxBodyBytes(next http.Handler, maxBytes int64) http.Handler {
 	})
 }
 
-// RateLimit: token-bucket per client IP
 func RateLimit(next http.Handler, burst int, perSecond int) http.Handler {
 	type bucket struct {
 		lim *rate.Limiter
@@ -136,7 +208,6 @@ func RateLimit(next http.Handler, burst int, perSecond int) http.Handler {
 }
 
 func clientIP(r *http.Request) string {
-	// X-Forwarded-For support (first IP)
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		parts := strings.Split(xff, ",")
 		return strings.TrimSpace(parts[0])
@@ -149,6 +220,5 @@ func clientIP(r *http.Request) string {
 }
 
 func isLocalOrigin(o string) bool {
-	// allow localhost during dev; extend list for prod domains later
 	return strings.HasPrefix(o, "http://localhost:") || strings.HasPrefix(o, "http://127.0.0.1:")
 }
