@@ -12,14 +12,15 @@ import (
 	"qazna.org/api/spec"
 	"qazna.org/internal/httpapi"
 	"qazna.org/internal/ledger"
+	"qazna.org/internal/obs"
 	pgstore "qazna.org/internal/store/pg"
 )
 
 const serviceName = "qazna-api"
-const serviceVersion = "0.5.3"
+const serviceVersion = "0.6.0"
 
 func main() {
-	// Select ledger backend: PostgreSQL (if QAZNA_PG_DSN is set) or in-memory
+	// Ledger backend: PostgreSQL или in-memory
 	var svc ledger.Service
 
 	if dsn := getenv("QAZNA_PG_DSN", ""); dsn != "" {
@@ -33,12 +34,15 @@ func main() {
 			}
 		}()
 		svc = store
-		log.Println("Using PostgreSQL store")
+		log.Println(`{"level":"info","msg":"Using PostgreSQL store"}`)
 	} else {
 		mem := ledger.NewInMemory()
 		svc = mem
-		log.Println("Using in-memory store")
+		log.Println(`{"level":"info","msg":"Using in-memory store"}`)
 	}
+
+	// Инициализируем метрики Prometheus
+	obs.Init()
 
 	api := httpapi.New(svc)
 	mux := http.NewServeMux()
@@ -56,14 +60,15 @@ func main() {
 			"time":    time.Now().UTC().Format(time.RFC3339),
 		})
 	})
+	// Prometheus metrics
+	mux.Handle("/metrics", obs.Handler())
 
-	// ---- OpenAPI (serve embedded bytes from api/spec)
+	// ---- OpenAPI / Docs
 	mux.HandleFunc("/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/yaml")
 		w.Header().Set("Cache-Control", "public, max-age=60")
 		_, _ = w.Write(spec.OpenAPI)
 	})
-	// Redoc documentation
 	mux.HandleFunc("/docs", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write([]byte(redocHTML("/openapi.yaml")))
@@ -108,17 +113,22 @@ func main() {
 
 	addr := getenv("QAZNA_API_ADDR", ":8080")
 
-	// --- Middleware chain (Security -> CORS -> MaxBody -> RateLimit -> Logging)
-	handler := httpapi.Logging(
-		httpapi.RateLimit(
-			httpapi.MaxBodyBytes(
-				httpapi.CORS(
-					httpapi.SecurityHeaders(mux),
+	// --- Middleware chain:
+	// RequestID -> Instrument (Prometheus) -> LoggingJSON -> RateLimit -> MaxBody -> CORS -> Security
+	handler := httpapi.RequestID(
+		obs.Instrument(
+			httpapi.LoggingJSON(
+				httpapi.RateLimit(
+					httpapi.MaxBodyBytes(
+						httpapi.CORS(
+							httpapi.SecurityHeaders(mux),
+						),
+						1<<20, // 1 MiB
+					),
+					100, // burst
+					100, // tokens per second
 				),
-				1<<20, // 1 MiB
 			),
-			100, // burst
-			100, // tokens per second
 		),
 	)
 
@@ -131,26 +141,26 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 	}
 
-	log.Printf("Starting %s %s on %s", serviceName, serviceVersion, addr)
+	log.Printf(`{"level":"info","msg":"Starting %s","version":"%s","addr":"%s","metrics":"/metrics"}`, serviceName, serviceVersion, addr)
 
 	// graceful shutdown
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("server error: %v", err)
+			log.Fatalf(`{"level":"fatal","msg":"server error","error":%q}`, err.Error())
 		}
 	}()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)
 	<-stop
-	log.Println("Shutting down...")
+	log.Println(`{"level":"info","msg":"Shutting down..."}`)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Printf("graceful shutdown error: %v", err)
+		log.Printf(`{"level":"error","msg":"graceful shutdown error","error":%q}`, err.Error())
 	} else {
-		log.Println("Server stopped")
+		log.Println(`{"level":"info","msg":"Server stopped"}`)
 	}
 }
 
