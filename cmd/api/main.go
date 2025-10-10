@@ -17,7 +17,7 @@ import (
 )
 
 const serviceName = "qazna-api"
-const serviceVersion = "0.6.0"
+const serviceVersion = "0.6.1"
 
 func main() {
 	// Ledger backend: PostgreSQL или in-memory
@@ -41,7 +41,7 @@ func main() {
 		log.Println(`{"level":"info","msg":"Using in-memory store"}`)
 	}
 
-	// Инициализируем метрики Prometheus
+	// Prometheus metrics
 	obs.Init()
 
 	api := httpapi.New(svc)
@@ -113,7 +113,7 @@ func main() {
 
 	addr := getenv("QAZNA_API_ADDR", ":8080")
 
-	// --- Middleware chain:
+	// Middleware chain:
 	// RequestID -> Instrument (Prometheus) -> LoggingJSON -> RateLimit -> MaxBody -> CORS -> Security
 	handler := httpapi.RequestID(
 		obs.Instrument(
