@@ -2,7 +2,10 @@ module qazna.org
 
 go 1.24.1
 
-require github.com/jackc/pgx/v5 v5.7.6
+require (
+	github.com/jackc/pgx/v5 v5.7.6
+	golang.org/x/time v0.14.0
+)
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
