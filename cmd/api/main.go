@@ -115,18 +115,19 @@ func main() {
 
 	// Middleware chain:
 	// RequestID -> Instrument (Prometheus) -> LoggingJSON -> RateLimit -> MaxBody -> CORS -> Security
-	handler := httpapi.RequestID(
-		obs.Instrument(
-			httpapi.LoggingJSON(
-				httpapi.RateLimit(
-					httpapi.MaxBodyBytes(
-						httpapi.CORS(
-							httpapi.SecurityHeaders(mux),
+	handler := httpapi.Recover(
+		httpapi.RequestID(
+			obs.Instrument(
+				httpapi.LoggingJSON(
+					httpapi.RateLimit(
+						httpapi.MaxBodyBytes(
+							httpapi.CORS(
+								httpapi.SecurityHeaders(mux),
+							),
+							1<<20,
 						),
-						1<<20, // 1 MiB
+						100, 100,
 					),
-					100, // burst
-					100, // tokens per second
 				),
 			),
 		),

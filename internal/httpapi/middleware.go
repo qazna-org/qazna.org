@@ -54,7 +54,6 @@ func RequestID(next http.Handler) http.Handler {
 		if rid == "" {
 			rid = genID()
 		}
-		// put to response & context
 		w.Header().Set("X-Request-Id", rid)
 		ctx := context.WithValue(r.Context(), requestIDKey, rid)
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -110,6 +109,22 @@ func LoggingJSON(next http.Handler) http.Handler {
 		}
 		b, _ := json.Marshal(rec)
 		log.Println(string(b))
+	})
+}
+
+/* =========================
+   Panic recovery (500 + лог)
+   ========================= */
+
+func Recover(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func(start time.Time) {
+			if rec := recover(); rec != nil {
+				log.Println(`{"level":"error","msg":"panic recovered","request_id":"` + RequestIDFromContext(r.Context()) + `"}`)
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			}
+		}(time.Now())
+		next.ServeHTTP(w, r)
 	})
 }
 
