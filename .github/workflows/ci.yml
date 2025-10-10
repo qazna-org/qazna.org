@@ -2,58 +2,78 @@ name: CI
 
 on:
   push:
+    branches: [ "main" ]
   pull_request:
+    branches: [ "main" ]
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ---- Go ----
-      - name: Set up Go
-        if: ${{ hashFiles('**/*.go') != '' }}
+      # ---------- Go ----------
+      - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.24.x'
-          check-latest: true
 
-      - name: Go env
-        if: ${{ hashFiles('**/*.go') != '' }}
+      - name: Go vet & test
         run: |
-          go version
-          go env GOVERSION GOMOD
+          go fmt ./...
+          go vet ./...
+          go test ./...
 
-      - name: Go build (cmd/* -> bin/)
-        if: ${{ hashFiles('**/*.go') != '' }}
-        run: |
-          set -e
-          mkdir -p bin
-          if [ -d "cmd" ]; then
-            for d in cmd/*; do
-              [ -d "$d" ] || continue
-              if grep -q "package main" "$d"/*.go 2>/dev/null; then
-                name="$(basename "$d")"
-                echo "[go build] $d -> bin/$name"
-                go build -o "bin/$name" "./$d"
-              fi
-            done
-          fi
-
-      # ---- Rust ----
-      - name: Set up Rust
-        if: ${{ hashFiles('core/**/Cargo.toml') != '' }}
+      # ---------- Rust (core/) ----------
+      - name: Rust toolchain (stable)
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
 
-      - name: Cargo fmt & check & test
-        if: ${{ hashFiles('core/**/Cargo.toml') != '' }}
+      - name: Cargo fmt/check/test
         working-directory: core
         run: |
           cargo fmt --all -- --check || true
           cargo check
           cargo test -q
+
+      # ---------- Docker Compose E2E ----------
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      - name: Compose up
+        run: docker compose up -d --build
+
+      - name: Wait for API healthy
+        run: |
+          for i in {1..60}; do
+            if curl -sf http://localhost:8080/healthz >/dev/null; then
+              curl -s http://localhost:8080/healthz | jq .
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API did not become healthy in time"
+          docker compose logs --no-color api || true
+          exit 1
+
+      - name: Smoke test (accounts + transfer + list)
+        env:
+          API_URL: http://localhost:8080
+        run: |
+          ACC_A=$(curl -s -X POST $API_URL/v1/accounts -H 'Content-Type: application/json' -d '{"currency":"QZN","initial_amount":100000}' | jq -r .id)
+          ACC_B=$(curl -s -X POST $API_URL/v1/accounts -H 'Content-Type: application/json' -d '{"currency":"QZN","initial_amount":0}' | jq -r .id)
+          echo "A=$ACC_A  B=$ACC_B"
+
+          JSON=$(printf '{"from_id":"%s","to_id":"%s","currency":"QZN","amount":25000}' "$ACC_A" "$ACC_B")
+          curl -s -X POST $API_URL/v1/transfers -H 'Content-Type: application/json' -H 'Idempotency-Key: gh-action-1' -d "$JSON" | jq .
+
+          curl -s "$API_URL/v1/ledger/transactions?limit=5" | jq .
+
+      - name: Compose down
+        if: always()
+        run: docker compose down -v

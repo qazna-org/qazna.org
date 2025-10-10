@@ -1,58 +1,69 @@
-## Qazna.org — Project Makefile (bootstrap)
-## Usage:
-##   make help
+# Qazna.org – Dev conveniences
 
 SHELL := /bin/bash
+COMPOSE ?= docker compose
+API_URL ?= http://localhost:8080
 
-.PHONY: help fmt lint build clean proto docs
-
+.PHONY: help
 help:
-	@echo "Qazna.org — common tasks"
-	@echo "  make fmt     - format (Go, Rust) if present"
-	@echo "  make lint    - quick static checks (Go vet)"
-	@echo "  make build   - build stubs if code exists"
-	@echo "  make proto   - placeholder for protobuf/TLA+"
-	@echo "  make docs    - validate Markdown links (local)"
-	@echo "  make clean   - clean build artifacts"
+	@echo "Targets:"
+	@echo "  make build         - build Go binary locally"
+	@echo "  make test          - go vet + go test"
+	@echo "  make rust          - cargo fmt/check/test in core/"
+	@echo "  make up            - docker compose up -d --build"
+	@echo "  make down          - docker compose down -v"
+	@echo "  make logs          - tail api logs"
+	@echo "  make health        - GET /healthz"
+	@echo "  make smoke         - end-to-end API smoke (create accounts, transfer, list)"
+	@echo "  make clean         - local cleanup (no docker volumes)"
 
-fmt:
-	@if command -v go >/dev/null 2>&1 && [ -n "$$(find . -name '*.go' -print -quit)" ]; then \
-		echo "[fmt] go fmt"; go fmt ./...; \
-	else echo "[fmt] skip go"; fi
-	@if command -v cargo >/dev/null 2>&1 && [ -n "$$(find core -name 'Cargo.toml' -print -quit)" ]; then \
-		echo "[fmt] rust fmt"; cargo fmt; \
-	else echo "[fmt] skip rust"; fi
-
-lint:
-	@if command -v go >/dev/null 2>&1 && [ -n "$$(find . -name '*.go' -print -quit)" ]; then \
-		echo "[lint] go vet"; go vet ./...; \
-	else echo "[lint] skip go"; fi
-
+# ─── Go local builds/tests ──────────────────────────────────────────────────────
+.PHONY: build
 build:
-	@if command -v go >/dev/null 2>&1 && [ -n "$$(find cmd -name main.go -print -quit)" ]; then \
-		echo "[build] go build"; go build ./...; \
-	else echo "[build] skip go"; fi
-	@if command -v cargo >/dev/null 2>&1 && [ -n "$$(find core -name 'Cargo.toml' -print -quit)" ]; then \
-		echo "[build] cargo build"; cargo build --release; \
-	else echo "[build] skip rust"; fi
+	GO111MODULE=on CGO_ENABLED=0 go build -o bin/qazna-api ./cmd/api
 
-openapi:
-	@echo "[openapi] spec at api/openapi.yaml"
-	@test -f api/openapi.yaml && echo "OK" || (echo "missing openapi.yaml"; exit 1)
+.PHONY: test
+test:
+	go fmt ./...
+	go vet ./...
+	go test ./...
 
-proto:
-	@echo "[proto] .proto files under api/proto/"
-	@test -d api/proto && find api/proto -name '*.proto' -print || (echo "missing api/proto"; exit 1)
-	@echo "[proto] placeholder (add protobuf/TLA+ generation here)"
+# ─── Rust (core/) ──────────────────────────────────────────────────────────────
+.PHONY: rust
+rust:
+	@cd core && cargo fmt --all -- --check || true
+	@cd core && cargo check
+	@cd core && cargo test -q
 
-docs:
-	@if command -v npx >/dev/null 2>&1; then \
-		echo "[docs] markdown-link-check"; npx -y markdown-link-check -q README.md; \
-	else echo "[docs] skipped (node not installed)"; fi
+# ─── Docker compose lifecycle ──────────────────────────────────────────────────
+.PHONY: up
+up:
+	$(COMPOSE) up -d --build
 
+.PHONY: down
+down:
+	$(COMPOSE) down -v
+
+.PHONY: logs
+logs:
+	$(COMPOSE) logs -f api
+
+# ─── Health & smoke ────────────────────────────────────────────────────────────
+.PHONY: health
+health:
+	@curl -s $(API_URL)/healthz | jq .
+
+.PHONY: smoke
+smoke:
+	@echo "Health:" && curl -s $(API_URL)/healthz | jq . ; \
+	ACC_A=$$(curl -s -X POST $(API_URL)/v1/accounts -H 'Content-Type: application/json' -d '{"currency":"QZN","initial_amount":100000}' | jq -r .id); \
+	ACC_B=$$(curl -s -X POST $(API_URL)/v1/accounts -H 'Content-Type: application/json' -d '{"currency":"QZN","initial_amount":0}' | jq -r .id); \
+	echo "A=$$ACC_A  B=$$ACC_B"; \
+	JSON=$$(printf '{"from_id":"%s","to_id":"%s","currency":"QZN","amount":25000}' "$$ACC_A" "$$ACC_B"); \
+	curl -s -X POST $(API_URL)/v1/transfers -H 'Content-Type: application/json' -H 'Idempotency-Key: demo-1' -d "$$JSON" | jq .; \
+	curl -s $(API_URL)/v1/ledger/transactions?limit=5 | jq .
+
+# ─── Misc ──────────────────────────────────────────────────────────────────────
+.PHONY: clean
 clean:
-	@rm -rf bin/ dist/ build/ target/
-	@echo "[clean] done"
-
-docker:
-	@docker build -t qazna/api:dev -f cmd/api/Dockerfile .
+	rm -rf bin/
