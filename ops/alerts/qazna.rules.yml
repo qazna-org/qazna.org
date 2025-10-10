@@ -1,0 +1,31 @@
+groups:
+  - name: qazna-api
+    interval: 15s
+    rules:
+      - alert: QaznaApiDown
+        expr: up{job="qazna-api"} == 0
+        for: 30s
+        labels: {severity: critical}
+        annotations:
+          summary: "qazna-api is down"
+
+      - alert: HighErrorRate5xx
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) > 0.1
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: "5xx error rate > 0.1 rps (5m)"
+
+      - alert: HighLatencyP99
+        expr: histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket[5m]))) > 0.25
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "p99 latency > 250ms (5m)"
+
+      - alert: NotReadyProbe
+        expr: max(qazna_ready) < 1
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: "readiness probe is not ready"

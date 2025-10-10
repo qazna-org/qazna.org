@@ -1,43 +1,76 @@
-version: "3.9"
+name: qaznaorg
 
 services:
   pg:
     image: postgres:16-alpine
     container_name: qazna-pg
     environment:
-      POSTGRES_USER: qazna
-      POSTGRES_PASSWORD: qazna
       POSTGRES_DB: qz
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     ports:
       - "5432:5432"
     volumes:
-      # Персистентные данные PostgreSQL
       - pgdata:/var/lib/postgresql/data
-      # Авто-применение схемы при первом старте (файлы в ./sql будут выполнены)
-      - ./sql:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U qazna -d qz"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
 
   api:
+    image: qaznaorg-api:latest
+    container_name: qazna-api
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: qazna-api
     environment:
-      # адрес HTTP-сервера
-      QAZNA_API_ADDR: ":8080"
-      # строка подключения для приложения — указываем на сервис pg (имя контейнера как хост)
-      QAZNA_PG_DSN: "postgres://qazna:qazna@pg:5432/qz?sslmode=disable"
+      QAZNA_PG_DSN: postgres://postgres:postgres@pg:5432/qz?sslmode=disable
+      QAZNA_HTTP_ADDR: ":8080"
+      QAZNA_LOG_LEVEL: "info"
+      QAZNA_LOG_FORMAT: "json"
     depends_on:
       pg:
         condition: service_healthy
     ports:
       - "8080:8080"
-    # при желании можно пробросить логи в stdout без лишнего шума
-    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: qazna-prom
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+      - --web.enable-admin-api
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./ops/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./ops/alerts/qazna.rules.yml:/etc/prometheus/rules/qazna.rules.yml:ro
+      - promdata:/prometheus
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: qazna-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_DEFAULT_THEME: dark
+    volumes:
+      - ./ops/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./ops/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./ops/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana:/var/lib/grafana
+    depends_on:
+      - prometheus
 
 volumes:
   pgdata:
+  promdata:
+  grafana:
