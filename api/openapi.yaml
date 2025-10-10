@@ -1,16 +1,25 @@
 openapi: 3.0.3
 info:
-  title: Qazna Public API
-  version: 0.1.0
+  title: Qazna API
+  version: "v1"
   description: |
-    Public, versioned API surface for Qazna.org (draft).
+    Qazna.org — minimal double-entry ledger API (MVP).
+    Idempotent transfers via `Idempotency-Key` header or body field.
+
 servers:
   - url: http://localhost:8080
+    description: Local dev
+
+tags:
+  - name: System
+  - name: Accounts
+  - name: Ledger
+
 paths:
   /healthz:
     get:
-      summary: Liveness & basic status
-      operationId: getHealth
+      tags: [System]
+      summary: Health check
       responses:
         "200":
           description: OK
@@ -18,37 +27,209 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [status, service, version]
                 properties:
-                  status:
-                    type: string
-                    example: ok
-                  service:
-                    type: string
-                    example: qazna-api
-                  version:
-                    type: string
-                    example: 0.1.0
+                  status: { type: string, example: ok }
+                  service: { type: string, example: qazna-api }
+                  version: { type: string, example: 0.3.0 }
+
   /v1/info:
     get:
-      summary: API info
-      operationId: getInfo
+      tags: [System]
+      summary: Service info
       responses:
         "200":
-          description: OK
+          description: Info
           content:
             application/json:
               schema:
                 type: object
-                required: [name, version, time]
                 properties:
-                  name:
-                    type: string
-                    example: qazna-api
-                  version:
-                    type: string
-                    example: 0.1.0
-                  time:
+                  name: { type: string }
+                  version: { type: string }
+                  time: { type: string, format: date-time }
+
+  /v1/accounts:
+    post:
+      tags: [Accounts]
+      summary: Create account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAccountRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "400":
+          description: Bad request
+
+  /v1/accounts/{id}:
+    get:
+      tags: [Accounts]
+      summary: Get account by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "404":
+          description: Not found
+
+  /v1/accounts/{id}/balance:
+    get:
+      tags: [Accounts]
+      summary: Get balance for currency
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: currency
+          required: true
+          schema: { type: string, example: QZN }
+      responses:
+        "200":
+          description: Balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Money"
+        "404":
+          description: Not found
+
+  /v1/transfers:
+    post:
+      tags: [Ledger]
+      summary: Transfer funds (idempotent)
+      description: |
+        Idempotency supported via either:
+        - `Idempotency-Key` HTTP header (preferred), or
+        - `idempotency_key` field in request body.
+
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema: { type: string }
+          description: Idempotency key
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransferRequest"
+
+      responses:
+        "201":
+          description: Transfer accepted
+          headers:
+            Idempotency-Key:
+              schema: { type: string }
+              description: Echoes idempotency key when provided
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+        "400":
+          description: Invalid amount/currency
+        "404":
+          description: Account not found
+        "409":
+          description: Insufficient funds
+
+  /v1/ledger/transactions:
+    get:
+      tags: [Ledger]
+      summary: List transactions (paginated by sequence)
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
+        - in: query
+          name: after
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Transaction"
+                  next_after:
+                    type: integer
+                    example: 42
+                  as_of:
                     type: string
                     format: date-time
-                    example: 2025-10-09T12:00:00Z
+
+components:
+  schemas:
+    Money:
+      type: object
+      properties:
+        currency: { type: string, example: QZN }
+        amount:   { type: integer, example: 1000 }
+      required: [currency, amount]
+
+    Account:
+      type: object
+      properties:
+        id:         { type: string, example: "eac452f0c532e3ba1f4280e8a2bceb78" }
+        created_at: { type: string, format: date-time }
+        balances:
+          type: object
+          additionalProperties:
+            type: integer
+          example: { QZN: 100000 }
+      required: [id, created_at, balances]
+
+    Transaction:
+      type: object
+      properties:
+        id:              { type: string }
+        created_at:      { type: string, format: date-time }
+        from_account_id: { type: string }
+        to_account_id:   { type: string }
+        currency:        { type: string }
+        amount:          { type: integer }
+        idempotency_key: { type: string, nullable: true }
+        sequence:        { type: integer }
+      required: [id, created_at, from_account_id, to_account_id, currency, amount, sequence]
+
+    CreateAccountRequest:
+      type: object
+      properties:
+        currency:       { type: string, example: QZN }
+        initial_amount: { type: integer, example: 100000 }
+      required: [currency, initial_amount]
+
+    TransferRequest:
+      type: object
+      properties:
+        from_id:         { type: string }
+        to_id:           { type: string }
+        currency:        { type: string, example: QZN }
+        amount:          { type: integer, example: 25000 }
+        idempotency_key: { type: string, nullable: true }
+      required: [from_id, to_id, currency, amount]

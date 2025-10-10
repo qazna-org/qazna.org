@@ -13,7 +13,7 @@ import (
 )
 
 const serviceName = "qazna-api"
-const serviceVersion = "0.3.0"
+const serviceVersion = "0.4.0"
 
 func main() {
 	// Select ledger backend: PostgreSQL (if QAZNA_PG_DSN is set) or in-memory
@@ -37,17 +37,15 @@ func main() {
 		log.Println("Using in-memory store")
 	}
 
-	// HTTP API
-	api := httpapi.New(svc) // NOTE: New must accept ledger.Service
+	api := httpapi.New(svc)
 
 	mux := http.NewServeMux()
 
-	// Basic endpoints
+	// ---- System
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"ok","service":"` + serviceName + `","version":"` + serviceVersion + `"}`))
 	})
-
 	mux.HandleFunc("/v1/info", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -57,7 +55,18 @@ func main() {
 		})
 	})
 
-	// Accounts
+	// ---- OpenAPI (serve file from repo)
+	mux.HandleFunc("/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		http.ServeFile(w, r, "api/openapi.yaml")
+	})
+	// Redoc documentation
+	mux.HandleFunc("/docs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(redocHTML("/openapi.yaml")))
+	})
+
+	// ---- Accounts & Ledger
 	mux.HandleFunc("/v1/accounts", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
@@ -66,8 +75,6 @@ func main() {
 			http.NotFound(w, r)
 		}
 	})
-
-	// GET /v1/accounts/{id}  and  GET /v1/accounts/{id}/balance?currency=QZN
 	mux.HandleFunc("/v1/accounts/", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -81,8 +88,6 @@ func main() {
 			http.NotFound(w, r)
 		}
 	})
-
-	// Transfers
 	mux.HandleFunc("/v1/transfers", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			api.Transfer(w, r)
@@ -90,8 +95,6 @@ func main() {
 		}
 		http.NotFound(w, r)
 	})
-
-	// Transactions listing
 	mux.HandleFunc("/v1/ledger/transactions", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			api.ListTransactions(w, r)
@@ -103,7 +106,7 @@ func main() {
 	addr := getenv("QAZNA_API_ADDR", ":8080")
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           httpapi.Logging(mux), // lightweight request logging
+		Handler:           httpapi.Logging(mux),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -120,10 +123,27 @@ func getenv(key, def string) string {
 	return def
 }
 
-// tiny suffix helper (avoids importing path libs for simple check)
 func hasSuffix(s, suf string) bool {
 	if len(suf) > len(s) {
 		return false
 	}
 	return s[len(s)-len(suf):] == suf
+}
+
+func redocHTML(specPath string) string {
+	// Simple Redoc from CDN
+	return `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Qazna API Docs</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>body{margin:0;padding:0}</style>
+    <link rel="icon" href="data:,">
+  </head>
+  <body>
+    <redoc spec-url="` + specPath + `"></redoc>
+    <script src="https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js"></script>
+  </body>
+</html>`
 }
