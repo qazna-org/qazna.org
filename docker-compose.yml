@@ -28,6 +28,7 @@ services:
     environment:
       QAZNA_PG_DSN: postgres://postgres:postgres@pg:5432/qz?sslmode=disable
       QAZNA_HTTP_ADDR: ":8080"
+      QAZNA_GRPC_ADDR: ":9090"
       QAZNA_LOG_LEVEL: "info"
       QAZNA_LOG_FORMAT: "json"
     depends_on:
@@ -35,6 +36,7 @@ services:
         condition: service_healthy
     ports:
       - "8080:8080"
+      - "19090:9090"
 
   prometheus:
     image: prom/prometheus:v2.55.1

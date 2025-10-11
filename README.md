@@ -123,6 +123,25 @@ Security contact: [security@qazna.org](mailto:security@qazna.org)
 
 ---
 
+## 🧪 Local Development
+
+- `make proto` — regenerate gRPC/Protobuf stubs (requires [`buf`](https://buf.build)); artifacts are written to `api/gen/go/api/proto/qazna/v1`.
+- `make test` — runs `go vet` and `go test` with the local cache, including REST and gRPC integration tests.
+- Default ports: HTTP `:8080`, gRPC `:9090` inside the container. Docker Compose maps gRPC to `localhost:19090` to avoid clashing with Prometheus on `9090`.
+- Quick gRPC check (uses [`grpcurl`](https://github.com/fullstorydev/grpcurl)):
+  ```bash
+  grpcurl -plaintext \
+    -import-path api/proto \
+    -proto api/proto/qazna/v1/health.proto \
+    -d '{}' \
+    localhost:19090 \
+    qazna.v1.HealthService/Check
+  ```
+- Exposed gRPC services (`qazna.v1`): `InfoService/GetInfo` and `HealthService/Check`; readiness updates the Prometheus gauge `qazna_ready`.
+- Exposed gRPC services (`qazna.v1`): `InfoService/GetInfo` and `HealthService/Check`; readiness updates the Prometheus gauge `qazna_ready`.
+
+---
+
 ## 📊 Transparency
 
 Quarterly reports and public dashboards will be published at:

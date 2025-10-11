@@ -9,6 +9,8 @@ help:
 	@echo "Targets:"
 	@echo "  make build         - build Go binary locally"
 	@echo "  make test          - go vet + go test"
+	@echo "  make fmt           - go fmt"
+	@echo "  make proto         - regenerate protobuf stubs with buf"
 	@echo "  make rust          - cargo fmt/check/test in core/"
 	@echo "  make up            - docker compose up -d --build"
 	@echo "  make down          - docker compose down -v"
@@ -24,9 +26,25 @@ build:
 
 .PHONY: test
 test:
-	go fmt ./...
 	go vet ./...
 	go test ./...
+
+.PHONY: fmt
+fmt:
+	go fmt ./...
+
+.PHONY: proto
+proto:
+	@if ! command -v buf >/dev/null 2>&1; then \
+		echo "buf binary is required (https://buf.build)."; exit 1; \
+	fi
+	rm -rf api/gen/go
+	buf generate
+	@if [ -d api/gen/go/qazna.org/api/gen/go ]; then \
+	  mkdir -p api/gen/go/api/proto/qazna/v1; \
+	  rsync -a api/gen/go/qazna.org/api/gen/go/api/proto/qazna/v1/ api/gen/go/api/proto/qazna/v1/; \
+	  rm -rf api/gen/go/qazna.org; \
+	fi
 
 # ─── Rust (core/) ──────────────────────────────────────────────────────────────
 .PHONY: rust
@@ -61,6 +79,8 @@ smoke:
 	echo "A=$$ACC_A  B=$$ACC_B"; \
 	JSON=$$(printf '{"from_id":"%s","to_id":"%s","currency":"QZN","amount":25000}' "$$ACC_A" "$$ACC_B"); \
 	curl -s -X POST $(API_URL)/v1/transfers -H 'Content-Type: application/json' -H 'Idempotency-Key: demo-1' -d "$$JSON" | jq .; \
+	echo "Account A:" && curl -s $(API_URL)/v1/accounts/$$ACC_A | jq .; \
+	echo "Balance B:" && curl -s "$(API_URL)/v1/accounts/$$ACC_B/balance?currency=QZN" | jq .; \
 	curl -s $(API_URL)/v1/ledger/transactions?limit=5 | jq .
 
 # ─── Misc ──────────────────────────────────────────────────────────────────────

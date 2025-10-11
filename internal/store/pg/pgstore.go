@@ -17,6 +17,8 @@ type Store struct {
 	db *sql.DB
 }
 
+var _ ledger.Service = (*Store)(nil)
+
 func Open(dsn string) (*Store, error) {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
@@ -32,8 +34,13 @@ func Open(dsn string) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
+func (s *Store) DB() *sql.DB { return s.db }
+
 func (s *Store) CreateAccount(ctx context.Context, initial ledger.Money) (ledger.Account, error) {
-	if initial.Currency == "" || initial.Amount < 0 {
+	if initial.Currency == "" {
+		return ledger.Account{}, ledger.ErrInvalidCurrency
+	}
+	if initial.Amount < 0 {
 		return ledger.Account{}, ledger.ErrInvalidAmount
 	}
 	id := uuid16()
@@ -147,8 +154,12 @@ func (s *Store) Transfer(ctx context.Context, fromID, toID string, amt ledger.Mo
 
 	// Lock accounts to ensure existence and stable ordering to avoid deadlocks
 	for _, acc := range sorted(fromID, toID) {
-		if _, err := tx.ExecContext(ctx, `select 1 from accounts where id=$1 for update`, acc); err != nil {
-			return ledger.Transaction{}, ledger.ErrNotFound
+		var dummy int
+		if err := tx.QueryRowContext(ctx, `select 1 from accounts where id=$1 for update`, acc).Scan(&dummy); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ledger.Transaction{}, ledger.ErrNotFound
+			}
+			return ledger.Transaction{}, err
 		}
 	}
 

@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -181,43 +182,63 @@ func MaxBodyBytes(next http.Handler, maxBytes int64) http.Handler {
 }
 
 func RateLimit(next http.Handler, burst int, perSecond int) http.Handler {
-	type bucket struct {
-		lim *rate.Limiter
-		ts  time.Time
+	if burst <= 0 || perSecond <= 0 {
+		return next
 	}
+
+	type bucket struct {
+		lim  *rate.Limiter
+		last time.Time
+	}
+
 	var (
-		buckets = make(map[string]*bucket)
-		ttl     = 5 * time.Minute
+		mu          sync.Mutex
+		buckets     = make(map[string]*bucket)
+		ttl         = 5 * time.Minute
+		cleanupTick = 1 * time.Minute
+		lastSweep   time.Time
 	)
-	ticker := time.NewTicker(1 * time.Minute)
-	go func() {
-		for range ticker.C {
-			now := time.Now()
-			for k, b := range buckets {
-				if now.Sub(b.ts) > ttl {
-					delete(buckets, k)
-				}
-			}
-		}
-	}()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		ip := clientIP(r)
 		if ip == "" {
 			ip = "unknown"
 		}
-		b, ok := buckets[ip]
-		if !ok {
-			lim := rate.NewLimiter(rate.Limit(perSecond), burst)
-			b = &bucket{lim: lim, ts: time.Now()}
-			buckets[ip] = b
+		now := time.Now()
+
+		mu.Lock()
+		if now.Sub(lastSweep) >= cleanupTick {
+			for key, entry := range buckets {
+				if now.Sub(entry.last) > ttl {
+					delete(buckets, key)
+				}
+			}
+			lastSweep = now
 		}
-		b.ts = time.Now()
-		if !b.lim.Allow() {
+
+		entry, ok := buckets[ip]
+		if !ok {
+			entry = &bucket{
+				lim:  rate.NewLimiter(rate.Limit(perSecond), burst),
+				last: now,
+			}
+			buckets[ip] = entry
+		}
+		entry.last = now
+		lim := entry.lim
+		mu.Unlock()
+
+		if !lim.Allow() {
 			w.WriteHeader(http.StatusTooManyRequests)
 			_, _ = w.Write([]byte("rate limit exceeded"))
 			return
 		}
+
 		next.ServeHTTP(w, r)
 	})
 }

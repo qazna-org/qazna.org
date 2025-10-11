@@ -21,5 +21,5 @@ COPY --from=builder /bin/qazna-api /usr/local/bin/qazna-api
 # Простое здоровье: /healthz
 HEALTHCHECK --interval=10s --timeout=3s --retries=10 CMD wget -qO- http://localhost:8080/healthz || exit 1
 
-EXPOSE 8080
+EXPOSE 8080 9090
 ENTRYPOINT ["qazna-api"]

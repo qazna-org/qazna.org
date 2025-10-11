@@ -1,55 +1,19 @@
-package main
+syntax = "proto3";
 
-import (
-	"encoding/json"
-	"fmt"
-	"log"
-	"net/http"
-	"os"
-	"time"
-)
+package qazna.v1;
 
-const serviceName = "qazna-api"
-const serviceVersion = "0.1.0"
+option go_package = "qazna.org/api/gen/go/api/proto/qazna/v1;v1";
 
-func main() {
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprintln(w, "Qazna API: ok")
-	})
-
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"status":"ok","service":"%s","version":"%s"}`, serviceName, serviceVersion)
-	})
-
-	mux.HandleFunc("/v1/info", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		payload := map[string]any{
-			"name":    serviceName,
-			"version": serviceVersion,
-			"time":    time.Now().UTC().Format(time.RFC3339),
-		}
-		_ = json.NewEncoder(w).Encode(payload)
-	})
-
-	addr := env("QAZNA_API_ADDR", ":8080")
-	srv := &http.Server{
-		Addr:              addr,
-		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-
-	log.Printf("Starting %s on %s", serviceName, addr)
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("server error: %v", err)
-	}
+// HealthService exposes simple readiness/health information.
+service HealthService {
+  rpc Check(HealthCheckRequest) returns (HealthCheckResponse);
 }
 
-func env(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  string status = 1;  // e.g. "ok"
+  string service = 2; // "qazna-api"
+  string version = 3;
+  string time_rfc3339 = 4;
 }

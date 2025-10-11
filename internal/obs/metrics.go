@@ -3,16 +3,17 @@ package obs
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// Общие HTTP-метрики
+// Common HTTP metrics and readiness gauge.
 var (
 	httpInFlight = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "http_in_flight_requests",
+		Name: "http_inflight_requests",
 		Help: "In-flight HTTP requests.",
 	})
 
@@ -32,22 +33,25 @@ var (
 		},
 		[]string{"method", "path", "status"},
 	)
+
+	readyGauge = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "qazna_ready",
+		Help: "Readiness state (1 when ready).",
+	})
 )
 
-// Регистрация метрик в default-регистре.
 func Init() {
-	prometheus.MustRegister(httpInFlight, httpRequestsTotal, httpRequestDuration)
+	prometheus.MustRegister(httpInFlight, httpRequestsTotal, httpRequestDuration, readyGauge)
+	readyGauge.Set(0)
 }
 
-// Хэндлер Prometheus.
 func Handler() http.Handler {
 	return promhttp.Handler()
 }
 
-// Обёртка для измерения RPS/latency/в полёте.
 func Instrument(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path // без роутера берём как есть
+		path := canonicalPath(r.URL.Path)
 		method := r.Method
 
 		httpInFlight.Inc()
@@ -65,7 +69,39 @@ func Instrument(next http.Handler) http.Handler {
 	})
 }
 
-// statusWriter — локальная копия, чтобы знать код ответа.
+func canonicalPath(path string) string {
+	if path == "" {
+		return "/"
+	}
+	if path == "/" || path == "/metrics" || path == "/healthz" || path == "/readyz" || path == "/v1/info" || path == "/openapi.yaml" {
+		return path
+	}
+	if strings.HasPrefix(path, "/v1/accounts/") {
+		rest := strings.TrimPrefix(path, "/v1/accounts/")
+		if strings.HasSuffix(path, "/balance") && strings.Count(rest, "/") == 1 {
+			return "/v1/accounts/:id/balance"
+		}
+		if !strings.Contains(rest, "/") {
+			return "/v1/accounts/:id"
+		}
+	}
+	if strings.HasPrefix(path, "/v1/ledger/transactions") {
+		return "/v1/ledger/transactions"
+	}
+	if strings.HasPrefix(path, "/v1/transfers") {
+		return "/v1/transfers"
+	}
+	return path
+}
+
+func SetReady(state bool) {
+	if state {
+		readyGauge.Set(1)
+		return
+	}
+	readyGauge.Set(0)
+}
+
 type statusWriter struct {
 	http.ResponseWriter
 	code int

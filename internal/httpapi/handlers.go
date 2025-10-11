@@ -8,10 +8,15 @@ import (
 	"time"
 
 	"qazna.org/api/spec"
+	"qazna.org/internal/ledger"
 	"qazna.org/internal/obs"
 )
 
-// ReadyProbe — простая проверка готовности (например, ping БД).
+type readinessChecker interface {
+	Check(ctx context.Context) error
+}
+
+// ReadyProbe performs a basic readiness check (for example, database ping).
 type ReadyProbe struct {
 	DB *sql.DB
 }
@@ -23,18 +28,26 @@ func (rp ReadyProbe) Check(ctx context.Context) error {
 	return rp.DB.PingContext(ctx)
 }
 
-// API — HTTP слой.
+// API implements the HTTP layer.
 type API struct {
-	mux        *http.ServeMux
-	readyProbe ReadyProbe
-	version    string
+	mux         *http.ServeMux
+	readiness   readinessChecker
+	version     string
+	ledger      ledger.Service
+	bodyMaxSize int64
+	rateBurst   int
+	ratePerSec  int
 }
 
-func New(rp ReadyProbe, version string) *API {
+func New(r readinessChecker, version string, ledgerService ledger.Service) *API {
 	a := &API{
-		mux:        http.NewServeMux(),
-		readyProbe: rp,
-		version:    version,
+		mux:         http.NewServeMux(),
+		readiness:   r,
+		version:     version,
+		ledger:      ledgerService,
+		bodyMaxSize: 1 << 20, // 1 MiB per request body
+		rateBurst:   20,
+		ratePerSec:  10,
 	}
 
 	// health/ready/info
@@ -45,10 +58,16 @@ func New(rp ReadyProbe, version string) *API {
 	// OpenAPI YAML
 	a.mux.HandleFunc("/openapi.yaml", a.OpenAPISpec)
 
+	// Ledger endpoints
+	a.mux.HandleFunc("/v1/accounts", a.handleAccountsCollection)
+	a.mux.HandleFunc("/v1/accounts/", a.handleAccountResource)
+	a.mux.HandleFunc("/v1/transfers", a.handleTransfers)
+	a.mux.HandleFunc("/v1/ledger/transactions", a.handleTransactions)
+
 	// Prometheus metrics
 	a.mux.Handle("/metrics", obs.Handler())
 
-	// (опционально) корень — 404
+	// Default root handler returns 404 to discourage direct browsing.
 	a.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	})
@@ -56,10 +75,17 @@ func New(rp ReadyProbe, version string) *API {
 	return a
 }
 
-// Handler возвращает http.Handler для сервера (без доп. аргументов).
+// Handler returns the HTTP handler fully wrapped with middlewares.
 func (a *API) Handler() http.Handler {
-	// оборачиваем весь mux метриками
-	return obs.Instrument(a.mux)
+	var h http.Handler = a.mux
+	h = MaxBodyBytes(h, a.bodyMaxSize)
+	h = RateLimit(h, a.rateBurst, a.ratePerSec)
+	h = CORS(h)
+	h = SecurityHeaders(h)
+	h = Recover(h)
+	h = LoggingJSON(h)
+	h = RequestID(h)
+	return obs.Instrument(h)
 }
 
 // --- Handlers ---
@@ -67,19 +93,21 @@ func (a *API) Handler() http.Handler {
 func (a *API) Healthz(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":  "ok",
-		"service": "qazna-api",
+		"service": serviceName,
 		"version": a.version,
 	})
 }
 
 func (a *API) Ready(w http.ResponseWriter, r *http.Request) {
-	if err := a.readyProbe.Check(r.Context()); err != nil {
+	if err := a.readiness.Check(r.Context()); err != nil {
+		obs.SetReady(false)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
 			"status": "not_ready",
 			"error":  err.Error(),
 		})
 		return
 	}
+	obs.SetReady(true)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status": "ready",
 	})
@@ -87,7 +115,7 @@ func (a *API) Ready(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) Info(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"name":    "qazna-api",
+		"name":    serviceName,
 		"time":    time.Now().UTC().Format(time.RFC3339),
 		"version": a.version,
 	})
@@ -95,7 +123,7 @@ func (a *API) Info(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) OpenAPISpec(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
-	_, _ = w.Write(spec.OpenAPI) // в пакете qazna.org/api/spec: //go:embed openapi.yaml
+	_, _ = w.Write(spec.OpenAPI) // content is embedded via //go:embed in qazna.org/api/spec
 }
 
 // --- helpers ---

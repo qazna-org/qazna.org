@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package qazna.v1;
 
-option go_package = "qazna.org/api/gen/go/qazna/v1;v1";
+option go_package = "qazna.org/api/gen/go/api/proto/qazna/v1;v1";
 
 // Public info service (draft).
 service InfoService {
