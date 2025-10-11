@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"qazna.org/internal/ledger"
+	"qazna.org/internal/stream"
 )
 
 type createAccountRequest struct {
@@ -190,6 +191,18 @@ func (a *API) transfer(w http.ResponseWriter, r *http.Request) {
 	if idem != "" {
 		w.Header().Set("Idempotency-Key", idem)
 	}
+
+	if a.stream != nil {
+		event := stream.TransferEvent{
+			From:      a.resolveLocation(req.FromID),
+			To:        a.resolveLocation(req.ToID),
+			Amount:    tx.Amount,
+			Currency:  tx.Currency,
+			Timestamp: time.Now().UTC(),
+		}
+		a.stream.Publish(event)
+	}
+
 	writeJSON(w, http.StatusCreated, tx)
 }
 

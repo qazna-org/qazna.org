@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"qazna.org/internal/ledger"
 	"qazna.org/internal/obs"
 	"qazna.org/internal/store/pg"
+	"qazna.org/internal/stream"
 
 	"google.golang.org/grpc"
 )
@@ -53,8 +55,10 @@ func main() {
 
 	rp := httpapi.ReadyProbe{DB: db}
 
+	evtStream := stream.New()
+
 	// HTTP API setup.
-	api := httpapi.New(rp, version, ledgerSvc)
+	api := httpapi.New(rp, version, ledgerSvc, evtStream)
 
 	srv := &http.Server{
 		Addr:              ":8080",
@@ -89,6 +93,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("grpc listen: %v", err)
 	}
+
+	var stopDemo func()
+	if v := os.Getenv("QAZNA_STREAM_DEMO"); strings.EqualFold(v, "1") || strings.EqualFold(v, "true") {
+		stopDemo = evtStream.StartDemo(3 * time.Second)
+	}
 	log.Printf("gRPC listening on %s", grpcAddr)
 
 	go func() {
@@ -109,6 +118,9 @@ func main() {
 	_ = srv.Shutdown(ctx)
 	grpcSrv.GracefulStop()
 	_ = lis.Close()
+	if stopDemo != nil {
+		stopDemo()
+	}
 	if storeClose != nil {
 		_ = storeClose()
 	} else if db != nil {

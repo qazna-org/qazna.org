@@ -10,6 +10,7 @@ import (
 	"qazna.org/api/spec"
 	"qazna.org/internal/ledger"
 	"qazna.org/internal/obs"
+	"qazna.org/internal/stream"
 )
 
 type readinessChecker interface {
@@ -34,17 +35,19 @@ type API struct {
 	readiness   readinessChecker
 	version     string
 	ledger      ledger.Service
+	stream      *stream.Stream
 	bodyMaxSize int64
 	rateBurst   int
 	ratePerSec  int
 }
 
-func New(r readinessChecker, version string, ledgerService ledger.Service) *API {
+func New(r readinessChecker, version string, ledgerService ledger.Service, s *stream.Stream) *API {
 	a := &API{
 		mux:         http.NewServeMux(),
 		readiness:   r,
 		version:     version,
 		ledger:      ledgerService,
+		stream:      s,
 		bodyMaxSize: 1 << 20, // 1 MiB per request body
 		rateBurst:   20,
 		ratePerSec:  10,
@@ -57,6 +60,13 @@ func New(r readinessChecker, version string, ledgerService ledger.Service) *API 
 
 	// OpenAPI YAML
 	a.mux.HandleFunc("/openapi.yaml", a.OpenAPISpec)
+
+	// Static map prototype
+	fs := http.FileServer(http.Dir("web"))
+	a.mux.Handle("/map/", http.StripPrefix("/map/", fs))
+
+	// Streaming endpoint (SSE)
+	a.mux.HandleFunc("/v1/stream", a.Stream)
 
 	// Ledger endpoints
 	a.mux.HandleFunc("/v1/accounts", a.handleAccountsCollection)
@@ -132,4 +142,15 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func (a *API) resolveLocation(id string) stream.Location {
+	if a.stream == nil {
+		return stream.Location{}
+	}
+	loc := a.stream.LocationForID(id)
+	if loc.Name == "" {
+		loc.Name = id
+	}
+	return loc
 }

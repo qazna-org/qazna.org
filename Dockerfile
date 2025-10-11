@@ -17,6 +17,7 @@ FROM alpine:3.20
 
 WORKDIR /app
 COPY --from=builder /bin/qazna-api /usr/local/bin/qazna-api
+COPY --from=builder /src/web /app/web
 
 # Простое здоровье: /healthz
 HEALTHCHECK --interval=10s --timeout=3s --retries=10 CMD wget -qO- http://localhost:8080/healthz || exit 1

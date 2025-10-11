@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"qazna.org/internal/ledger"
+	"qazna.org/internal/stream"
 )
 
 type apiClient struct {
@@ -21,7 +22,7 @@ type apiClient struct {
 
 func newTestAPI(t *testing.T) *apiClient {
 	t.Helper()
-	api := New(ReadyProbe{}, "test", ledger.NewInMemory())
+	api := New(ReadyProbe{}, "test", ledger.NewInMemory(), stream.New())
 	api.rateBurst = 100
 	api.ratePerSec = 100
 
