@@ -8,3 +8,7 @@ publish = false
 [lib]
 name = "qazna_ledger"
 path = "src/lib.rs"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+ulid = { version = "1.3" }
