@@ -10,6 +10,11 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      QAZNA_POSTGRES_PASSWORD: testpass
+      QAZNA_GRAFANA_ADMIN_PASSWORD: adminpass
+      QAZNA_STREAM_DEMO: "0"
+      QAZNA_ALLOWED_ORIGINS: http://localhost:8080
 
     steps:
       - name: Checkout
@@ -62,9 +67,6 @@ jobs:
       - name: Smoke gRPC health (demo env)
         env:
           PATH: "${{ env.PATH }}:${{ github.workspace }}/bin"
-          QAZNA_POSTGRES_PASSWORD: testpass
-          QAZNA_GRAFANA_ADMIN_PASSWORD: adminpass
-          QAZNA_STREAM_DEMO: "0"
         run: |
           docker compose up -d pg
           sleep 5
