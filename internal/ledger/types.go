@@ -1,10 +1,10 @@
 package ledger
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"time"
+
+	"qazna.org/internal/ids"
 )
 
 // Money is represented in minor units (e.g., cents). No floats.
@@ -43,9 +43,6 @@ var (
 	ErrInvalidCurrency   = errors.New("invalid currency")
 )
 
-// uuid16 generates a hex 16-byte id without external deps.
-func uuid16() string {
-	var b [16]byte
-	_, _ = rand.Read(b[:])
-	return hex.EncodeToString(b[:])
+func newID() string {
+	return ids.New()
 }

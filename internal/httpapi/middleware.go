@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -158,7 +159,7 @@ func CORS(next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin != "" && isLocalOrigin(origin) {
+		if origin != "" && isAllowedOrigin(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 		}
@@ -257,4 +258,40 @@ func clientIP(r *http.Request) string {
 
 func isLocalOrigin(o string) bool {
 	return strings.HasPrefix(o, "http://localhost:") || strings.HasPrefix(o, "http://127.0.0.1:")
+}
+
+var (
+	allowedOriginsOnce sync.Once
+	allowedOriginsList []string
+)
+
+func loadAllowedOrigins() {
+	allowedOriginsOnce.Do(func() {
+		raw := os.Getenv("QAZNA_ALLOWED_ORIGINS")
+		if raw == "" {
+			allowedOriginsList = nil
+			return
+		}
+		parts := strings.Split(raw, ",")
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			allowedOriginsList = append(allowedOriginsList, p)
+		}
+	})
+}
+
+func isAllowedOrigin(origin string) bool {
+	loadAllowedOrigins()
+	if len(allowedOriginsList) > 0 {
+		for _, allowed := range allowedOriginsList {
+			if strings.EqualFold(allowed, origin) {
+				return true
+			}
+		}
+		return false
+	}
+	return isLocalOrigin(origin)
 }

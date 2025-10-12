@@ -54,7 +54,7 @@ func main() {
 		ledgerSvc = ledger.NewInMemory()
 	}
 
-	tmpl := template.Must(template.New("base").ParseGlob("web/templates/**/*.html"))
+	tmpl := mustParseTemplates()
 
 	rp := httpapi.ReadyProbe{DB: db}
 
@@ -130,4 +130,21 @@ func main() {
 		_ = db.Close()
 	}
 	log.Println("Stopped")
+}
+
+func mustParseTemplates() *template.Template {
+	base := template.New("base")
+	patterns := []string{
+		"web/templates/layout/*.html",
+		"web/templates/parts/*.html",
+		"web/templates/pages/*.html",
+	}
+	var err error
+	for _, pattern := range patterns {
+		base, err = base.ParseGlob(pattern)
+		if err != nil {
+			log.Fatalf("parse templates %s: %v", pattern, err)
+		}
+	}
+	return base
 }

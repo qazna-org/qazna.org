@@ -6,6 +6,7 @@ toolchain go1.24.1
 
 require (
 	github.com/jackc/pgx/v5 v5.7.6
+	github.com/oklog/ulid/v2 v2.1.1
 	github.com/prometheus/client_golang v1.19.1
 	golang.org/x/time v0.14.0
 	google.golang.org/grpc v1.76.0

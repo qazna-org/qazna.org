@@ -40,11 +40,6 @@ proto:
 	fi
 	rm -rf api/gen/go
 	buf generate
-	@if [ -d api/gen/go/qazna.org/api/gen/go ]; then \
-	  mkdir -p api/gen/go/api/proto/qazna/v1; \
-	  rsync -a api/gen/go/qazna.org/api/gen/go/api/proto/qazna/v1/ api/gen/go/api/proto/qazna/v1/; \
-	  rm -rf api/gen/go/qazna.org; \
-	fi
 
 # ─── Rust (core/) ──────────────────────────────────────────────────────────────
 .PHONY: rust

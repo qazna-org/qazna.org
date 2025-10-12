@@ -2,14 +2,13 @@ package pg
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	"qazna.org/internal/ids"
 	"qazna.org/internal/ledger"
 )
 
@@ -43,7 +42,7 @@ func (s *Store) CreateAccount(ctx context.Context, initial ledger.Money) (ledger
 	if initial.Amount < 0 {
 		return ledger.Account{}, ledger.ErrInvalidAmount
 	}
-	id := uuid16()
+	id := ids.New()
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -126,7 +125,7 @@ func (s *Store) Transfer(ctx context.Context, fromID, toID string, amt ledger.Mo
 		return ledger.Transaction{}, ledger.ErrInvalidCurrency
 	}
 
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	if err != nil {
 		return ledger.Transaction{}, err
 	}
@@ -203,7 +202,7 @@ func (s *Store) Transfer(ctx context.Context, fromID, toID string, amt ledger.Mo
 	}
 
 	// Record transaction
-	tid := uuid16()
+	tid := ids.New()
 	var seq uint64
 	if err := tx.QueryRowContext(ctx, `
 		insert into transactions(id, from_account_id, to_account_id, currency, amount, idempotency_key)
@@ -262,12 +261,6 @@ func (s *Store) ListTransactions(ctx context.Context, limit int, afterSeq uint64
 }
 
 // --- helpers ---
-func uuid16() string {
-	var b [16]byte
-	_, _ = rand.Read(b[:])
-	return hex.EncodeToString(b[:])
-}
-
 func sorted(a, b string) []string {
 	if a <= b {
 		return []string{a, b}

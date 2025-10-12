@@ -145,6 +145,7 @@ func (a *API) MapPage(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{
 		"Title": "Qazna Global Flow",
 	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := a.templates.ExecuteTemplate(w, "map", data); err != nil {
 		http.Error(w, "template rendering error", http.StatusInternalServerError)
 	}

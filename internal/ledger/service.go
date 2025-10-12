@@ -43,7 +43,7 @@ func (s *InMemory) CreateAccount(ctx context.Context, initial Money) (Account, e
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	id := uuid16()
+	id := newID()
 	acc := &Account{
 		ID:        id,
 		CreatedAt: time.Now().UTC(),
@@ -118,7 +118,7 @@ func (s *InMemory) Transfer(ctx context.Context, fromID, toID string, amt Money,
 
 	s.seq++
 	tx := Transaction{
-		ID:             uuid16(),
+		ID:             newID(),
 		CreatedAt:      time.Now().UTC(),
 		FromAccountID:  fromID,
 		ToAccountID:    toID,
