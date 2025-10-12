@@ -44,17 +44,17 @@ func main() {
 		storeClose func() error
 		remoteClient *remote.Client
 	)
-	if addr := os.Getenv("QAZNA_LEDGER_GRPC_ADDR"); addr != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		client, err := remote.Dial(ctx, addr)
-		cancel()
-		if err != nil {
-			log.Fatalf("dial remote ledger: %v", err)
-		}
-		ledgerSvc = remote.NewService(client)
-		remoteClient = client
-		log.Printf("Using remote ledger at %s", addr)
-	} else if dsn := os.Getenv("QAZNA_PG_DSN"); dsn != "" {
+    if addr := os.Getenv("QAZNA_LEDGER_GRPC_ADDR"); addr != "" {
+        ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+        client, err := remote.Dial(ctx, addr)
+        cancel()
+        if err != nil {
+            log.Fatalf("dial remote ledger: %v", err)
+        }
+        ledgerSvc = remote.NewService(client)
+        remoteClient = client
+        log.Printf("Using remote ledger at %s", addr)
+    } else if dsn := os.Getenv("QAZNA_PG_DSN"); dsn != "" {
 		store, err := pg.Open(dsn)
 		if err != nil {
 			log.Fatalf("open db: %v", err)
