@@ -1,0 +1,15 @@
+image:
+  repository: qaznaorg-api
+  tag: latest
+  pullPolicy: IfNotPresent
+
+postgres:
+  enabled: true
+  host: pg
+  passwordSecret: qazna-postgres
+
+grafana:
+  enabled: true
+
+prometheus:
+  enabled: true

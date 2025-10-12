@@ -1,10 +1,11 @@
 package remote
 
 import (
-	context "context"
+	"context"
 	"time"
 
 	v1 "qazna.org/api/gen/go/api/proto/qazna/v1"
+	"qazna.org/internal/ledger"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -36,29 +37,108 @@ func (c *Client) Close() error {
 	return c.conn.Close()
 }
 
-func (c *Client) CreateAccount(ctx context.Context, currency string, initial int64) (*v1.Account, error) {
-	return c.svc.CreateAccount(ctx, &v1.CreateAccountRequest{Currency: currency, InitialAmount: initial})
+// Service adapts the gRPC client to the ledger.Service interface.
+type Service struct {
+	client *Client
 }
 
-func (c *Client) GetAccount(ctx context.Context, id string) (*v1.Account, error) {
-	return c.svc.GetAccount(ctx, &v1.GetAccountRequest{Id: id})
-}
+func NewService(client *Client) *Service { return &Service{client: client} }
 
-func (c *Client) GetBalance(ctx context.Context, id, currency string) (*v1.Balance, error) {
-	return c.svc.GetBalance(ctx, &v1.GetBalanceRequest{Id: id, Currency: currency})
-}
-
-func (c *Client) Transfer(ctx context.Context, req *v1.TransferRequest) (*v1.TransferResponse, error) {
-	return c.svc.Transfer(ctx, req)
-}
-
-func (c *Client) ListTransactions(ctx context.Context, after uint64, limit uint32) (*v1.ListTransactionsResponse, error) {
-	return c.svc.ListTransactions(ctx, &v1.ListTransactionsRequest{
-		AfterSequence: after,
-		Limit:         limit,
+func (s *Service) CreateAccount(ctx context.Context, initial ledger.Money) (ledger.Account, error) {
+	resp, err := s.client.svc.CreateAccount(ctx, &v1.CreateAccountRequest{
+		Currency:      initial.Currency,
+		InitialAmount: initial.Amount,
 	})
+	if err != nil {
+		return ledger.Account{}, err
+	}
+	return fromProtoAccount(resp), nil
 }
 
+func (s *Service) GetAccount(ctx context.Context, id string) (ledger.Account, error) {
+	resp, err := s.client.svc.GetAccount(ctx, &v1.GetAccountRequest{Id: id})
+	if err != nil {
+		return ledger.Account{}, err
+	}
+	return fromProtoAccount(resp), nil
+}
+
+func (s *Service) GetBalance(ctx context.Context, id, currency string) (ledger.Money, error) {
+	resp, err := s.client.svc.GetBalance(ctx, &v1.GetBalanceRequest{Id: id, Currency: currency})
+	if err != nil {
+		return ledger.Money{}, err
+	}
+	return ledger.Money{Currency: resp.Currency, Amount: resp.Amount}, nil
+}
+
+func (s *Service) Transfer(ctx context.Context, fromID, toID string, amt ledger.Money, idemKey string) (ledger.Transaction, error) {
+	resp, err := s.client.svc.Transfer(ctx, &v1.TransferRequest{
+		FromId:         fromID,
+		ToId:           toID,
+		Currency:       amt.Currency,
+		Amount:         amt.Amount,
+		IdempotencyKey: idemKey,
+	})
+	if err != nil {
+		return ledger.Transaction{}, err
+	}
+	return fromProtoTransaction(resp.Transaction), nil
+}
+
+func (s *Service) ListTransactions(ctx context.Context, limit int, afterSeq uint64) ([]ledger.Transaction, uint64, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	resp, err := s.client.svc.ListTransactions(ctx, &v1.ListTransactionsRequest{
+		AfterSequence: afterSeq,
+		Limit:         uint32(limit),
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	items := make([]ledger.Transaction, 0, len(resp.Items))
+	for _, item := range resp.Items {
+		items = append(items, fromProtoTransaction(item))
+	}
+	return items, resp.NextAfter, nil
+}
+
+// Helpers -----------------------------------------------------------------
+
+func fromProtoAccount(a *v1.Account) ledger.Account {
+	balances := make(map[string]int64, len(a.Balances))
+	for k, v := range a.Balances {
+		balances[k] = v
+	}
+	var created time.Time
+	if ts := a.GetCreatedAt(); ts != nil {
+		created = ts.AsTime()
+	}
+	return ledger.Account{
+		ID:        a.Id,
+		CreatedAt: created,
+		Balances:  balances,
+	}
+}
+
+func fromProtoTransaction(tx *v1.Transaction) ledger.Transaction {
+	var created time.Time
+	if ts := tx.GetCreatedAt(); ts != nil {
+		created = ts.AsTime()
+	}
+	return ledger.Transaction{
+		ID:             tx.Id,
+		CreatedAt:      created,
+		FromAccountID:  tx.FromAccountId,
+		ToAccountID:    tx.ToAccountId,
+		Currency:       tx.Currency,
+		Amount:         tx.Amount,
+		IdempotencyKey: tx.IdempotencyKey,
+		Sequence:       tx.Sequence,
+	}
+}
+
+// ToProtoTimestamp converts time to protobuf timestamp.
 // WithTimeout returns a context with default timeout useful for CLI tools.
 func WithTimeout(parent context.Context, d time.Duration) (context.Context, context.CancelFunc) {
 	if d <= 0 {

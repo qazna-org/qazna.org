@@ -19,6 +19,7 @@ import (
 	v1 "qazna.org/api/gen/go/api/proto/qazna/v1"
 	"qazna.org/internal/httpapi"
 	"qazna.org/internal/ledger"
+	"qazna.org/internal/ledger/remote"
 	"qazna.org/internal/obs"
 	"qazna.org/internal/store/pg"
 	"qazna.org/internal/stream"
@@ -36,13 +37,24 @@ func main() {
 	obs.Init()
 	obs.InitBuildInfo(version, commit)
 
-	// Choose ledger backend: Postgres (when DSN provided) or in-memory (default).
+	// Choose ledger backend: remote gRPC, Postgres (DSN), or in-memory.
 	var (
 		db         *sql.DB
 		ledgerSvc  ledger.Service
 		storeClose func() error
+		remoteClient *remote.Client
 	)
-	if dsn := os.Getenv("QAZNA_PG_DSN"); dsn != "" {
+	if addr := os.Getenv("QAZNA_LEDGER_GRPC_ADDR"); addr != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		client, err := remote.Dial(ctx, addr)
+		cancel()
+		if err != nil {
+			log.Fatalf("dial remote ledger: %v", err)
+		}
+		ledgerSvc = remote.NewService(client)
+		remoteClient = client
+		log.Printf("Using remote ledger at %s", addr)
+	} else if dsn := os.Getenv("QAZNA_PG_DSN"); dsn != "" {
 		store, err := pg.Open(dsn)
 		if err != nil {
 			log.Fatalf("open db: %v", err)
@@ -123,6 +135,9 @@ func main() {
 	_ = lis.Close()
 	if stopDemo != nil {
 		stopDemo()
+	}
+	if remoteClient != nil {
+		_ = remoteClient.Close()
 	}
 	if storeClose != nil {
 		_ = storeClose()

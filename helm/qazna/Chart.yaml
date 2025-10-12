@@ -1,0 +1,4 @@
+apiVersion: v2
+name: qazna
+version: 0.1.0
+description: Qazna API + Prometheus + Grafana

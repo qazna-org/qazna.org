@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "qazna.fullname" . }}-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "qazna.fullname" . }}-api
+  template:
+    metadata:
+      labels:
+        app: {{ include "qazna.fullname" . }}-api
+    spec:
+      containers:
+        - name: qazna-api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: QAZNA_PG_DSN
+              value: {{ printf "postgres://postgres:$(POSTGRES_PASSWORD)@%s:5432/qz?sslmode=disable" .Values.postgres.host | quote }}
+          ports:
+            - containerPort: 8080
