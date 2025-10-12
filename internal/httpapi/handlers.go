@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"html/template"
 	"net/http"
 	"time"
 
@@ -36,18 +37,20 @@ type API struct {
 	version     string
 	ledger      ledger.Service
 	stream      *stream.Stream
+	templates   *template.Template
 	bodyMaxSize int64
 	rateBurst   int
 	ratePerSec  int
 }
 
-func New(r readinessChecker, version string, ledgerService ledger.Service, s *stream.Stream) *API {
+func New(r readinessChecker, version string, ledgerService ledger.Service, s *stream.Stream, tmpl *template.Template) *API {
 	a := &API{
 		mux:         http.NewServeMux(),
 		readiness:   r,
 		version:     version,
 		ledger:      ledgerService,
 		stream:      s,
+		templates:   tmpl,
 		bodyMaxSize: 1 << 20, // 1 MiB per request body
 		rateBurst:   20,
 		ratePerSec:  10,
@@ -61,9 +64,8 @@ func New(r readinessChecker, version string, ledgerService ledger.Service, s *st
 	// OpenAPI YAML
 	a.mux.HandleFunc("/openapi.yaml", a.OpenAPISpec)
 
-	// Static map prototype
-	fs := http.FileServer(http.Dir("web"))
-	a.mux.Handle("/map/", http.StripPrefix("/map/", fs))
+	// Static assets (CSS/JS/brand)
+	a.mux.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("web/assets"))))
 
 	// Streaming endpoint (SSE)
 	a.mux.HandleFunc("/v1/stream", a.Stream)
@@ -77,10 +79,9 @@ func New(r readinessChecker, version string, ledgerService ledger.Service, s *st
 	// Prometheus metrics
 	a.mux.Handle("/metrics", obs.Handler())
 
-	// Default root handler returns 404 to discourage direct browsing.
-	a.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.NotFound(w, r)
-	})
+	// Map pages
+	a.mux.HandleFunc("/map", a.MapPage)
+	a.mux.HandleFunc("/", a.MapPage)
 
 	return a
 }
@@ -134,6 +135,19 @@ func (a *API) Info(w http.ResponseWriter, r *http.Request) {
 func (a *API) OpenAPISpec(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
 	_, _ = w.Write(spec.OpenAPI) // content is embedded via //go:embed in qazna.org/api/spec
+}
+
+func (a *API) MapPage(w http.ResponseWriter, r *http.Request) {
+	if a.templates == nil {
+		http.NotFound(w, r)
+		return
+	}
+	data := map[string]any{
+		"Title": "Qazna Global Flow",
+	}
+	if err := a.templates.ExecuteTemplate(w, "map", data); err != nil {
+		http.Error(w, "template rendering error", http.StatusInternalServerError)
+	}
 }
 
 // --- helpers ---

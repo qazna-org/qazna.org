@@ -32,7 +32,7 @@ function addFlow(event) {
 
   polyline.bindPopup(
     `<strong>${labelFrom}</strong> → <strong>${labelTo}</strong><br>` +
-    `${amountMajor} ${event.currency}`
+      `${amountMajor} ${event.currency}`
   );
 
   setTimeout(() => flowsLayer.removeLayer(polyline), 60000);

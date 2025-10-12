@@ -1,0 +1,30 @@
+{{define "siteHeader"}}
+<header class="qz-header">
+  <nav class="navbar navbar-expand-lg navbar-dark">
+    <div class="container-fluid px-4">
+      <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+        <img src="/assets/brand/logo.svg" alt="Qazna" class="qz-logo" />
+        <span>Qazna</span>
+      </a>
+      <button
+        class="navbar-toggler"
+        type="button"
+        data-bs-toggle="collapse"
+        data-bs-target="#mainNav"
+        aria-controls="mainNav"
+        aria-expanded="false"
+        aria-label="Toggle navigation"
+      >
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="mainNav">
+        <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+          <li class="nav-item"><a class="nav-link active" href="#">Global Flow</a></li>
+          <li class="nav-item"><a class="nav-link" href="https://qazna.org" target="_blank" rel="noopener">Foundation</a></li>
+          <li class="nav-item"><a class="nav-link" href="/openapi.yaml" target="_blank" rel="noopener">API Spec</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+</header>
+{{end}}

@@ -1,0 +1,29 @@
+{{define "content"}}
+<div id="map"></div>
+{{template "siteHeader" .}}
+<main class="qz-hero text-center text-white" id="hero">
+  <button type="button" class="btn-close btn-close-white qz-hero-close" aria-label="Close"></button>
+  <div class="container">
+    <h1 class="display-4 fw-semibold">Live Monetary Streams</h1>
+    <p class="lead mb-4">
+      Observe sovereign liquidity flows as they pulse through the Qazna network. Real-time transparency for a balanced global economy.
+    </p>
+    <div class="d-flex justify-content-center gap-3 flex-wrap">
+      <a class="btn btn-lg btn-light px-4" href="#" role="button">Explore dashboard</a>
+      <a
+        class="btn btn-lg btn-outline-light px-4"
+        href="https://qazna.org/transparency"
+        target="_blank"
+        rel="noopener"
+        role="button"
+        >Transparency reports</a
+      >
+    </div>
+  </div>
+</main>
+{{template "siteFooter" .}}
+{{end}}
+
+{{define "map"}}
+{{template "base" .}}
+{{end}}

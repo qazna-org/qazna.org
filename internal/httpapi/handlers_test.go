@@ -22,7 +22,7 @@ type apiClient struct {
 
 func newTestAPI(t *testing.T) *apiClient {
 	t.Helper()
-	api := New(ReadyProbe{}, "test", ledger.NewInMemory(), stream.New())
+	api := New(ReadyProbe{}, "test", ledger.NewInMemory(), stream.New(), nil)
 	api.rateBurst = 100
 	api.ratePerSec = 100
 

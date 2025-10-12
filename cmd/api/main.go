@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"html/template"
 	"log"
 	"net"
 	"net/http"
@@ -53,12 +54,14 @@ func main() {
 		ledgerSvc = ledger.NewInMemory()
 	}
 
+	tmpl := template.Must(template.New("base").ParseGlob("web/templates/**/*.html"))
+
 	rp := httpapi.ReadyProbe{DB: db}
 
 	evtStream := stream.New()
 
 	// HTTP API setup.
-	api := httpapi.New(rp, version, ledgerSvc, evtStream)
+	api := httpapi.New(rp, version, ledgerSvc, evtStream, tmpl)
 
 	srv := &http.Server{
 		Addr:              ":8080",

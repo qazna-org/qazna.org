@@ -1,0 +1,10 @@
+{{define "base"}}
+<!doctype html>
+<html lang="en" class="h-100">
+  {{template "head" .}}
+  <body class="h-100">
+    {{block "content" .}}{{end}}
+    {{template "scripts" .}}
+  </body>
+</html>
+{{end}}
