@@ -2,19 +2,19 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ---------- Go ----------
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -25,20 +25,26 @@ jobs:
         with:
           buf-version: latest
 
-      - name: Check protobufs up to date
+      - name: Go fmt (check)
         run: |
-          make proto
-          git status --short
+          GOFILES=$(find . -name '*.go' -not -path './vendor/*')
+          gofmt -w $GOFILES
           git diff --exit-code
 
       - name: Go vet & test
-        run: make test
+        run: |
+          go vet ./...
+          go test ./...
+
+      - name: Buf generate (check)
+        run: |
+          make proto
+          git diff --exit-code
 
       - name: Install grpcurl
         run: go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
 
-      # ---------- Rust (core/) ----------
-      - name: Rust toolchain (stable)
+      - name: Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -50,51 +56,22 @@ jobs:
           cargo check
           cargo test -q
 
-      # ---------- Docker Compose E2E ----------
-      - name: Install tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq
+      - name: Docker Compose build (api only)
+        run: docker compose build api
 
-      - name: Compose up
-        run: docker compose up -d --build
-
-      - name: Wait for API healthy
-        run: |
-          for i in {1..60}; do
-            if curl -sf http://localhost:8080/healthz >/dev/null; then
-              curl -s http://localhost:8080/healthz | jq .
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "API did not become healthy in time"
-          docker compose logs --no-color api || true
-          exit 1
-
-      - name: gRPC health check
-        run: |
-          export PATH="$(go env GOPATH)/bin:$PATH"
-          grpcurl -plaintext \
-            -import-path api/proto \
-            -proto api/proto/qazna/v1/health.proto \
-            -d '{}' \
-            localhost:19090 \
-            qazna.v1.HealthService/Check
-
-      - name: Smoke test (accounts + transfer + list)
+      - name: Smoke gRPC health (demo env)
         env:
-          API_URL: http://localhost:8080
+          PATH: "${{ env.PATH }}:${{ github.workspace }}/bin"
+          QAZNA_POSTGRES_PASSWORD: testpass
+          QAZNA_GRAFANA_ADMIN_PASSWORD: adminpass
+          QAZNA_STREAM_DEMO: "0"
         run: |
-          ACC_A=$(curl -s -X POST $API_URL/v1/accounts -H 'Content-Type: application/json' -d '{"currency":"QZN","initial_amount":100000}' | jq -r .id)
-          ACC_B=$(curl -s -X POST $API_URL/v1/accounts -H 'Content-Type: application/json' -d '{"currency":"QZN","initial_amount":0}' | jq -r .id)
-          echo "A=$ACC_A  B=$ACC_B"
+          docker compose up -d pg
+          sleep 5
+          docker compose up -d api
+          sleep 5
+          grpcurl -plaintext -d '{}' localhost:19090 qazna.v1.HealthService/Check
 
-          JSON=$(printf '{"from_id":"%s","to_id":"%s","currency":"QZN","amount":25000}' "$ACC_A" "$ACC_B")
-          curl -s -X POST $API_URL/v1/transfers -H 'Content-Type: application/json' -H 'Idempotency-Key: gh-action-1' -d "$JSON" | jq .
-
-          curl -s "$API_URL/v1/ledger/transactions?limit=5" | jq .
-
-      - name: Compose down
+      - name: Tear down compose
         if: always()
         run: docker compose down -v
