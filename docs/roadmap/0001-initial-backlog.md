@@ -8,7 +8,7 @@
 ## Stream B — Security & Access Control
 - [ ] Проект RBAC: схема БД (users, organizations, roles, permissions).
 - [ ] Проект API авторизации (OAuth 2.0/OIDC, token issuance, audit log).
-- [ ] Draft audit log storage (append-only)
+- [ ] Draft audit log storage (append-only).
 
 ## Stream C — Infrastructure & CI
 - [x] GitHub Actions (lint, tests, buf) — **готово**.
