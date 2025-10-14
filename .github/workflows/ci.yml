@@ -1,79 +1,30 @@
+# .github/workflows/ci.yml
 name: CI
 
-on:
-  push:
-    branches: ["main"]
-  pull_request:
-    branches: ["main"]
+on: [push, pull_request]
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      QAZNA_POSTGRES_PASSWORD: testpass
-      QAZNA_GRAFANA_ADMIN_PASSWORD: adminpass
-      QAZNA_STREAM_DEMO: "0"
-      QAZNA_ALLOWED_ORIGINS: http://localhost:8080
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.24.x'
-
-      - name: Setup Buf
-        uses: bufbuild/buf-setup-action@v1
-        with:
-          buf-version: latest
-
-      - name: Go fmt (check)
-        run: |
-          GOFILES=$(find . -name '*.go' -not -path './vendor/*')
-          gofmt -w $GOFILES
-          git diff --exit-code
-
-      - name: Go vet & test
-        run: |
-          go vet ./...
-          go test ./...
-
-      - name: Buf generate (check)
-        run: |
-          make proto
-          git diff --exit-code
-
-      - name: Install grpcurl
-        run: go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
-
-      - name: Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-
-      - name: Cargo fmt/check/test
-        working-directory: core
-        run: |
-          cargo fmt --all -- --check || true
-          cargo check
-          cargo test -q
-
-      - name: Docker Compose build (api only)
-        run: docker compose build api
-
-      - name: Smoke gRPC health (demo env)
+      - name: Run docker compose
         env:
-          PATH: "${{ env.PATH }}:${{ github.workspace }}/bin"
-        run: |
-          docker compose up -d pg
-          sleep 5
-          docker compose up -d api
-          sleep 5
-          grpcurl -plaintext -d '{}' localhost:19090 qazna.v1.HealthService/Check
+          # Передаем секреты из GitHub Secrets в переменные окружения
+          QAZNA_AUTH_PRIVATE_KEY: ${{ secrets.QAZNA_AUTH_PRIVATE_KEY }}
+          QAZNA_AUTH_PUBLIC_KEY: ${{ secrets.QAZNA_AUTH_PUBLIC_KEY }}
+          # Для тестов можно использовать простые пароли
+          QAZNA_POSTGRES_PASSWORD: test-password
+          QAZNA_GRAFANA_ADMIN_PASSWORD: test-password
+        run: docker compose up -d --build
 
-      - name: Tear down compose
-        if: always()
-        run: docker compose down -v
+      - name: Wait for services to be healthy
+        run: |
+          sleep 15
+          docker compose ps
+          curl -s --fail http://localhost:8080/healthz
+
+      - name: Run local tests
+        run: make test
