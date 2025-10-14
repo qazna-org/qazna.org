@@ -1,10 +1,18 @@
 html,
 body {
-  height: 100%;
+  min-height: 100%;
   margin: 0;
-  background-color: #00ABC2;
-  color: #f9fafb;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+body.map-page {
+  background-color: #0d6efd;
+  color: #ffffff;
+}
+
+body.dashboard {
+  background-color: #f8f9fa;
+  color: #666;
 }
 
 #map {
@@ -16,7 +24,7 @@ body {
 }
 
 .leaflet-top .leaflet-control {
-    margin-top: 60px;
+  margin-top: 60px;
 }
 
 .leaflet-popup-content {
@@ -24,8 +32,8 @@ body {
   line-height: 1.4;
 }
 
-.qz-header,
-.qz-footer {
+body.map-page .qz-header,
+body.map-page .qz-footer {
   position: fixed;
   left: 0;
   width: 100%;
@@ -33,14 +41,14 @@ body {
   pointer-events: auto;
 }
 
-.qz-header {
+body.map-page .qz-header {
   top: 0;
 }
 
-.qz-header .navbar {
+body.map-page .qz-header .navbar {
   padding-top: 0.3rem;
   padding-bottom: 0.3rem;
-  background: rgba(0, 95, 108, 0.5);
+  background: rgb(13, 110, 253, .8);
   backdrop-filter: blur(10px);
   box-shadow: 0 10px 20px rgba(0, 60, 75, 0.25);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -51,7 +59,7 @@ body {
   height: 32px;
 }
 
-.qz-hero {
+body.map-page .qz-hero {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -61,9 +69,9 @@ body {
   transition: opacity 0.25s ease, transform 0.25s ease;
 }
 
-.qz-hero .container {
+body.map-page .qz-hero .container {
   max-width: 720px;
-  background: rgba(0, 95, 108, 0.5);
+  background: rgb(13, 110, 253, .8);
   backdrop-filter: blur(10px);
   padding: 2rem 2rem;
   border-radius: 2rem;
@@ -71,45 +79,63 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.qz-hero .btn {
+body.map-page .qz-hero .btn {
   box-shadow: 0 10px 20px rgba(0, 60, 75, 0.25);
 }
 
-.qz-hero.qz-hero-hidden {
+body.map-page .qz-hero.qz-hero-hidden {
   opacity: 0;
   transform: translate(-50%, -45%);
   pointer-events: none;
 }
 
-.qz-hero-close {
+body.map-page .qz-hero-close {
   position: absolute;
   top: -18px;
   right: -18px;
-  background-color: rgba(0, 95, 108, 0.5);
+  background-color: rgb(13, 110, 253, .8);
   padding: 0.65rem;
   border-radius: 999px;
   box-shadow: 0 10px 20px rgba(0, 60, 75, 0.25);
 }
 
-.qz-hero-close:hover {
+body.map-page .qz-hero-close:hover {
   background-color: rgba(20, 55, 60, 0.9);
 }
 
-.qz-footer {
+body.map-page .qz-footer {
   bottom: 0;
   padding: 0.3rem 0;
-  background: rgba(0, 95, 108, 0.5);
+  background: rgb(13, 110, 253, .8);
   backdrop-filter: blur(10px);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   z-index: 1000;
 }
 
+body.dashboard main {
+  padding-top: 2rem;
+  padding-bottom: 4rem;
+}
+
+body.dashboard .stat-card {
+  border-left: 4px solid var(--bs-primary);
+  border-radius: 0.75rem;
+  box-shadow: 0 0.5rem 1rem rgba(33, 37, 41, 0.15);
+}
+
+body.dashboard .timeline-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
 @media (max-width: 576px) {
-  .qz-hero .container {
+  body.map-page .qz-hero .container {
     padding: 2rem;
   }
 
-  .qz-header .navbar {
+  body.map-page .qz-header .navbar {
     padding-left: 1rem;
     padding-right: 1rem;
   }

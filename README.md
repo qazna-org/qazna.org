@@ -125,10 +125,15 @@ Security contact: [security@qazna.org](mailto:security@qazna.org)
 
 ## 🧪 Local Development
 
-- `cp .env.example .env` — заполните секреты (`QAZNA_POSTGRES_PASSWORD`, `QAZNA_GRAFANA_ADMIN_PASSWORD`) и при необходимости `QAZNA_ALLOWED_ORIGINS`. Для подключения к внешнему Rust-ядру укажите `QAZNA_LEDGER_GRPC_ADDR`.
+- `cp .env.example .env` — populate required secrets (`QAZNA_POSTGRES_PASSWORD`, `QAZNA_GRAFANA_ADMIN_PASSWORD`, `QAZNA_AUTH_PRIVATE_KEY`, `QAZNA_AUTH_PUBLIC_KEY`) and optional `QAZNA_ALLOWED_ORIGINS`, `QAZNA_AUTH_KEY_ID`, `QAZNA_AUTH_ISSUER`, and lifetime overrides. Set `QAZNA_LEDGER_GRPC_ADDR` to connect to an external Rust ledger.
 - `make proto` — regenerate gRPC/Protobuf stubs (requires [`buf`](https://buf.build)); artifacts are written to `api/gen/go/api/proto/qazna/v1`.
 - `make test` — runs `go vet` and `go test` with the local cache, including REST and gRPC integration tests.
 - Default ports: HTTP `:8080`, gRPC `:9090` inside the container. Docker Compose maps gRPC to `localhost:19090` to avoid clashing with Prometheus on `9090`.
+- UI entry points:
+  - `http://localhost:8080/` — real-time global flow map.
+  - `http://localhost:8080/admin/dashboard` — operational control center for administrators.
+  - `http://localhost:8080/banks/dashboard` — liquidity and settlement console for national/central banks.
+- Detailed dashboard runbook: [`docs/ui/dashboards.md`](docs/ui/dashboards.md)
 - Quick gRPC check (uses [`grpcurl`](https://github.com/fullstorydev/grpcurl)):
   ```bash
   grpcurl -plaintext \

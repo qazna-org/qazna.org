@@ -3,7 +3,6 @@ name: qaznaorg
 services:
   pg:
     image: postgres:16-alpine
-    container_name: qazna-pg
     environment:
       POSTGRES_DB: qz
       POSTGRES_USER: postgres
@@ -17,7 +16,7 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      - ./sql:/docker-entrypoint-initdb.d:ro
 
   api:
     image: qaznaorg-api:latest
@@ -32,16 +31,26 @@ services:
       QAZNA_LOG_LEVEL: "info"
       QAZNA_LOG_FORMAT: "json"
       QAZNA_ALLOWED_ORIGINS: ${QAZNA_ALLOWED_ORIGINS:-}
+      QAZNA_AUTH_PRIVATE_KEY: ${QAZNA_AUTH_PRIVATE_KEY:?set QAZNA_AUTH_PRIVATE_KEY}
+      QAZNA_AUTH_PUBLIC_KEY: ${QAZNA_AUTH_PUBLIC_KEY:?set QAZNA_AUTH_PUBLIC_KEY}
+      QAZNA_AUTH_KEY_ID: ${QAZNA_AUTH_KEY_ID:-}
+      QAZNA_AUTH_ISSUER: ${QAZNA_AUTH_ISSUER:-}
+      QAZNA_AUTH_ACCESS_TTL: ${QAZNA_AUTH_ACCESS_TTL:-}
+      QAZNA_AUTH_REFRESH_TTL: ${QAZNA_AUTH_REFRESH_TTL:-}
     depends_on:
       pg:
         condition: service_healthy
     ports:
       - "8080:8080"
       - "19090:9090"
+    networks:
+      default:
+        aliases:
+          - api
+          - qazna-api
 
   prometheus:
     image: prom/prometheus:v2.55.1
-    container_name: qazna-prom
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -49,6 +58,8 @@ services:
       - --web.enable-admin-api
     ports:
       - "9090:9090"
+    networks:
+      - default
     volumes:
       - ./ops/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./ops/alerts/qazna.rules.yml:/etc/prometheus/rules/qazna.rules.yml:ro
@@ -58,7 +69,6 @@ services:
 
   grafana:
     image: grafana/grafana:11.0.0
-    container_name: qazna-grafana
     ports:
       - "3000:3000"
     environment:
@@ -72,6 +82,8 @@ services:
       - grafana:/var/lib/grafana
     depends_on:
       - prometheus
+    networks:
+      - default
 
 volumes:
   pgdata:

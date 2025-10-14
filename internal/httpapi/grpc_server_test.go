@@ -54,7 +54,7 @@ func startBufGRPC(t *testing.T, srv *GRPCServer) (*grpc.ClientConn, func()) {
 }
 
 func TestGRPCServer_InfoAndHealth(t *testing.T) {
-	srv := NewGRPCServer(ReadyProbe{}, "1.2.3")
+	srv := NewGRPCServer(ReadyProbe{}, "1.2.3", nil)
 	conn, cleanup := startBufGRPC(t, srv)
 	defer cleanup()
 
@@ -86,7 +86,7 @@ type failingReadiness struct{}
 func (f failingReadiness) Check(context.Context) error { return errors.New("boom") }
 
 func TestGRPCServer_HealthFailure(t *testing.T) {
-	srv := NewGRPCServer(failingReadiness{}, "1.0.0")
+	srv := NewGRPCServer(failingReadiness{}, "1.0.0", nil)
 	conn, cleanup := startBufGRPC(t, srv)
 	defer cleanup()
 

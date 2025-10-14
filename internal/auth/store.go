@@ -9,6 +9,7 @@ type Store interface {
 	Roles(ctx context.Context) RoleStore
 	Permissions(ctx context.Context) PermissionStore
 	Audit(ctx context.Context) AuditStore
+	RefreshTokens(ctx context.Context) RefreshTokenStore
 }
 
 // OrganizationStore manages organizations.
@@ -24,6 +25,7 @@ type UserStore interface {
 	Find(ctx context.Context, id string) (*User, error)
 	FindByEmail(ctx context.Context, email string) (*User, error)
 	ListByOrg(ctx context.Context, orgID string) ([]*User, error)
+	UpdatePassword(ctx context.Context, userID, passwordHash string) error
 }
 
 // RoleStore manages roles and assignments.
@@ -46,4 +48,12 @@ type PermissionStore interface {
 // AuditStore appends immutable entries.
 type AuditStore interface {
 	Append(ctx context.Context, entry *AuditEntry) error
+}
+
+// RefreshTokenStore manages refresh token lifecycle.
+type RefreshTokenStore interface {
+	Create(ctx context.Context, tok *RefreshToken) error
+	Find(ctx context.Context, id string) (*RefreshToken, error)
+	MarkRevoked(ctx context.Context, id string) error
+	MarkRevokedByUser(ctx context.Context, userID string) error
 }

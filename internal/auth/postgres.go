@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 
 	"qazna.org/internal/ids"
 )
@@ -28,6 +29,9 @@ func (s *PGStore) Permissions(context context.Context) PermissionStore {
 	return &permissionStore{db: s.db}
 }
 func (s *PGStore) Audit(context context.Context) AuditStore { return &auditStore{db: s.db} }
+func (s *PGStore) RefreshTokens(context context.Context) RefreshTokenStore {
+	return &refreshTokenStore{db: s.db}
+}
 
 // Organization store -------------------------------------------------------
 type orgStore struct{ db *sql.DB }
@@ -93,17 +97,17 @@ func (s *userStore) Create(ctx context.Context, u *User) error {
 		u.ID = ids.New()
 	}
 	_, err := s.db.ExecContext(ctx,
-		`insert into users(id, organization_id, email, status) values($1,$2,$3,$4)`,
-		u.ID, u.OrganizationID, u.Email, u.Status,
+		`insert into users(id, organization_id, email, password_hash, status) values($1,$2,$3,$4,$5)`,
+		u.ID, u.OrganizationID, u.Email, u.PasswordHash, u.Status,
 	)
 	return err
 }
 
 func (s *userStore) Find(ctx context.Context, id string) (*User, error) {
 	row := s.db.QueryRowContext(ctx,
-		`select id, organization_id, email, status, created_at, updated_at from users where id=$1`, id)
+		`select id, organization_id, email, password_hash, status, created_at, updated_at from users where id=$1`, id)
 	var u User
-	if err := row.Scan(&u.ID, &u.OrganizationID, &u.Email, &u.Status, &u.CreatedAt, &u.UpdatedAt); err != nil {
+	if err := row.Scan(&u.ID, &u.OrganizationID, &u.Email, &u.PasswordHash, &u.Status, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrNotFound
 		}
@@ -114,9 +118,9 @@ func (s *userStore) Find(ctx context.Context, id string) (*User, error) {
 
 func (s *userStore) FindByEmail(ctx context.Context, email string) (*User, error) {
 	row := s.db.QueryRowContext(ctx,
-		`select id, organization_id, email, status, created_at, updated_at from users where email=$1`, email)
+		`select id, organization_id, email, password_hash, status, created_at, updated_at from users where email=$1`, email)
 	var u User
-	if err := row.Scan(&u.ID, &u.OrganizationID, &u.Email, &u.Status, &u.CreatedAt, &u.UpdatedAt); err != nil {
+	if err := row.Scan(&u.ID, &u.OrganizationID, &u.Email, &u.PasswordHash, &u.Status, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrNotFound
 		}
@@ -142,6 +146,19 @@ func (s *userStore) ListByOrg(ctx context.Context, orgID string) ([]*User, error
 		users = append(users, &u)
 	}
 	return users, rows.Err()
+}
+
+func (s *userStore) UpdatePassword(ctx context.Context, userID, passwordHash string) error {
+	res, err := s.db.ExecContext(ctx,
+		`update users set password_hash=$2, updated_at=now() where id=$1`, userID, passwordHash)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // Role store ---------------------------------------------------------------
@@ -310,5 +327,55 @@ func (s *auditStore) Append(ctx context.Context, entry *AuditEntry) error {
 		entry.ID, entry.OccurredAt, entry.ActorUserID, entry.ActorOrgID, entry.Action,
 		entry.ResourceType, entry.ResourceID, meta, entry.TraceID,
 	)
+	return err
+}
+
+// Refresh token store ------------------------------------------------------
+type refreshTokenStore struct{ db *sql.DB }
+
+func (s *refreshTokenStore) Create(ctx context.Context, tok *RefreshToken) error {
+	if tok.ID == "" {
+		tok.ID = ids.New()
+	}
+	if tok.TokenHash == "" {
+		return errors.New("token hash is required")
+	}
+	_, err := s.db.ExecContext(ctx,
+		`insert into refresh_tokens(id, user_id, token_hash, expires_at, created_at, revoked)
+         values($1,$2,$3,$4,now(),false)`,
+		tok.ID, tok.UserID, tok.TokenHash, tok.ExpiresAt,
+	)
+	return err
+}
+
+func (s *refreshTokenStore) Find(ctx context.Context, id string) (*RefreshToken, error) {
+	row := s.db.QueryRowContext(ctx,
+		`select id, user_id, token_hash, expires_at, created_at, revoked
+         from refresh_tokens where id=$1`, id)
+	var tok RefreshToken
+	if err := row.Scan(&tok.ID, &tok.UserID, &tok.TokenHash, &tok.ExpiresAt, &tok.CreatedAt, &tok.Revoked); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &tok, nil
+}
+
+func (s *refreshTokenStore) MarkRevoked(ctx context.Context, id string) error {
+	res, err := s.db.ExecContext(ctx,
+		`update refresh_tokens set revoked=true where id=$1`, id)
+	if err != nil {
+		return err
+	}
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *refreshTokenStore) MarkRevokedByUser(ctx context.Context, userID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`update refresh_tokens set revoked=true where user_id=$1`, userID)
 	return err
 }

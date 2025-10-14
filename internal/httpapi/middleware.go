@@ -155,7 +155,7 @@ func SecurityHeaders(next http.Handler) http.Handler {
 
 func CORS(next http.Handler) http.Handler {
 	allowedMethods := "GET,POST,OPTIONS"
-	allowedHeaders := "Content-Type,Idempotency-Key,X-Request-Id"
+	allowedHeaders := "Content-Type,Idempotency-Key,X-Request-Id,Authorization"
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")

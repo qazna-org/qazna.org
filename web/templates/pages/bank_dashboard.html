@@ -1,0 +1,161 @@
+{{define "bank-dashboard"}}
+<!doctype html>
+<html lang="en" class="h-100">
+  {{template "head" .}}
+  <body class="h-100 dashboard d-flex flex-column min-vh-100">
+    {{template "siteHeader" .}}
+    <main class="flex-grow-1 py-4">
+      <div class="container">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+          <div>
+            <h1 class="h3 mb-1">Central Bank Operations Desk</h1>
+            <p class="text-muted mb-0">Welcome, {{.InstitutionName}} · Liquidity position as of {{.LastUpdated}}</p>
+          </div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-primary" type="button">Initiate Settlement</button>
+            <button class="btn btn-outline-secondary" type="button">Export Daily Report</button>
+          </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+          {{range .BankMetrics}}
+          <div class="col-12 col-md-6 col-xl-3">
+            <div class="p-4 bg-white stat-card h-100 border-start border-4 border-{{.Accent}}">
+              <span class="text-uppercase text-muted small">{{.Title}}</span>
+              <h3 class="mt-2 mb-1">{{.Value}}</h3>
+              <p class="mb-0 text-muted">{{.Description}}</p>
+            </div>
+          </div>
+          {{end}}
+        </div>
+
+        <div class="row g-4 mb-4">
+          <div class="col-12 col-xl-6">
+            <div class="card h-100">
+              <div class="card-header bg-white">
+                <h2 class="h6 mb-0">Liquidity Health</h2>
+              </div>
+              <div class="card-body">
+                {{if .LiquidityOverview}}
+                <div class="list-group list-group-flush">
+                  {{range .LiquidityOverview}}
+                  <div class="list-group-item px-0 d-flex justify-content-between align-items-start">
+                    <div>
+                      <div class="fw-semibold">{{.Pool}}</div>
+                      <div class="small text-muted">Coverage: {{.Coverage}}</div>
+                    </div>
+                    <span class="badge text-bg-{{.BadgeVariant}}">{{.Status}}</span>
+                  </div>
+                  {{end}}
+                </div>
+                {{else}}
+                <p class="text-muted mb-0">No liquidity pools reported.</p>
+                {{end}}
+              </div>
+            </div>
+          </div>
+          <div class="col-12 col-xl-6">
+            <div class="card h-100">
+              <div class="card-header bg-white">
+                <h2 class="h6 mb-0">Settlement Queue</h2>
+              </div>
+              <div class="card-body">
+                {{if .SettlementQueue}}
+                <div class="list-group list-group-numbered">
+                  {{range .SettlementQueue}}
+                  <div class="list-group-item">
+                    <div class="d-flex justify-content-between align-items-center">
+                      <div>
+                        <div class="fw-semibold">{{.Counterparty}}</div>
+                        <div class="small text-muted">{{.SettlementWindow}}</div>
+                      </div>
+                      <span class="badge bg-primary">{{.Amount}}</span>
+                    </div>
+                  </div>
+                  {{end}}
+                </div>
+                {{else}}
+                <p class="text-muted mb-0">No pending settlements.</p>
+                {{end}}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+          <div class="col-12 col-lg-6">
+            <div class="card h-100">
+              <div class="card-header bg-white">
+                <h2 class="h6 mb-0">Regional Flow Snapshot</h2>
+              </div>
+              <div class="card-body">
+                {{if .RegionalBreakdown}}
+                <div class="table-responsive">
+                  <table class="table align-middle mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th scope="col">Region</th>
+                        <th scope="col">Today</th>
+                        <th scope="col">7d Trend</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {{range .RegionalBreakdown}}
+                      <tr>
+                        <td>{{.Region}}</td>
+                        <td>{{.Today}}</td>
+                        <td><span class="badge text-bg-{{.TrendVariant}}">{{.Trend}}</span></td>
+                      </tr>
+                      {{end}}
+                    </tbody>
+                  </table>
+                </div>
+                {{else}}
+                <p class="text-muted mb-0">No distribution data available.</p>
+                {{end}}
+              </div>
+            </div>
+          </div>
+          <div class="col-12 col-lg-6">
+            <div class="card h-100">
+              <div class="card-header bg-white">
+                <h2 class="h6 mb-0">Latest Settlements</h2>
+              </div>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th scope="col">Time (UTC)</th>
+                        <th scope="col">Counterparty</th>
+                        <th scope="col" class="text-end">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {{if .RecentTransactions}}
+                      {{range .RecentTransactions}}
+                      <tr>
+                        <td>{{.CreatedAt}}</td>
+                        <td>{{.ToAccountID}}</td>
+                        <td class="text-end">{{.Amount}} {{.Currency}}</td>
+                      </tr>
+                      {{end}}
+                      {{else}}
+                      <tr>
+                        <td colspan="3" class="text-center text-muted py-3">No settlements executed today.</td>
+                      </tr>
+                      {{end}}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+    {{template "siteFooter" .}}
+    {{template "scripts" .}}
+  </body>
+</html>
+{{end}}

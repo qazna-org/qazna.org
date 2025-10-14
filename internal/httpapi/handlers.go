@@ -4,11 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"time"
 
 	"qazna.org/api/spec"
+	"qazna.org/internal/auth"
 	"qazna.org/internal/ledger"
 	"qazna.org/internal/obs"
 	"qazna.org/internal/stream"
@@ -37,19 +40,21 @@ type API struct {
 	version     string
 	ledger      ledger.Service
 	stream      *stream.Stream
+	auth        *auth.Service
 	templates   *template.Template
 	bodyMaxSize int64
 	rateBurst   int
 	ratePerSec  int
 }
 
-func New(r readinessChecker, version string, ledgerService ledger.Service, s *stream.Stream, tmpl *template.Template) *API {
+func New(r readinessChecker, version string, ledgerService ledger.Service, s *stream.Stream, tmpl *template.Template, authSvc *auth.Service) *API {
 	a := &API{
 		mux:         http.NewServeMux(),
 		readiness:   r,
 		version:     version,
 		ledger:      ledgerService,
 		stream:      s,
+		auth:        authSvc,
 		templates:   tmpl,
 		bodyMaxSize: 1 << 20, // 1 MiB per request body
 		rateBurst:   20,
@@ -60,6 +65,7 @@ func New(r readinessChecker, version string, ledgerService ledger.Service, s *st
 	a.mux.HandleFunc("/healthz", a.Healthz)
 	a.mux.HandleFunc("/readyz", a.Ready)
 	a.mux.HandleFunc("/v1/info", a.Info)
+	a.mux.HandleFunc("/v1/auth/token", a.handleAuthToken)
 
 	// OpenAPI YAML
 	a.mux.HandleFunc("/openapi.yaml", a.OpenAPISpec)
@@ -81,6 +87,8 @@ func New(r readinessChecker, version string, ledgerService ledger.Service, s *st
 
 	// Map pages
 	a.mux.HandleFunc("/map", a.MapPage)
+	a.mux.HandleFunc("/admin/dashboard", a.AdminDashboard)
+	a.mux.HandleFunc("/banks/dashboard", a.BankDashboard)
 	a.mux.HandleFunc("/", a.MapPage)
 
 	return a
@@ -94,6 +102,7 @@ func (a *API) Handler() http.Handler {
 	h = CORS(h)
 	h = SecurityHeaders(h)
 	h = Recover(h)
+	h = a.withAuth(h)
 	h = LoggingJSON(h)
 	h = RequestID(h)
 	return obs.Instrument(h)
@@ -138,17 +147,135 @@ func (a *API) OpenAPISpec(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) MapPage(w http.ResponseWriter, r *http.Request) {
-	if a.templates == nil {
-		http.NotFound(w, r)
-		return
-	}
 	data := map[string]any{
-		"Title": "Qazna Global Flow",
+		"Title":             "Qazna Global Flow",
+		"ContentTemplate":   "content-map",
+		"BodyClass":         "map-page",
+		"Layout":            "map",
+		"IncludeMapScripts": true,
+		"ActivePage":        "map",
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := a.templates.ExecuteTemplate(w, "map", data); err != nil {
-		http.Error(w, "template rendering error", http.StatusInternalServerError)
+	a.renderTemplate(w, r, "map", data)
+}
+
+func (a *API) AdminDashboard(w http.ResponseWriter, r *http.Request) {
+	lastUpdated := time.Now().UTC().Format("2006-01-02 15:04 MST")
+	readyStatus := "Operational"
+	readyBadge := "success"
+	readyDetail := "All probes passing"
+	var alerts []map[string]string
+
+	if err := a.readiness.Check(r.Context()); err != nil {
+		readyStatus = "Attention"
+		readyBadge = "warning"
+		readyDetail = err.Error()
+		alerts = append(alerts, map[string]string{
+			"Title":        "Readiness probe degraded",
+			"Severity":     "Warning",
+			"BadgeVariant": "warning",
+			"Timestamp":    lastUpdated,
+			"Detail":       err.Error(),
+		})
 	}
+
+	ledgerStatus := "Synchronized"
+	ledgerBadge := "success"
+	ledgerDetail := "Ledger adapter responding"
+	ctx, cancel := context.WithTimeout(r.Context(), 250*time.Millisecond)
+	defer cancel()
+	if _, _, err := a.ledger.ListTransactions(ctx, 1, 0); err != nil {
+		ledgerStatus = "Degraded"
+		ledgerBadge = "warning"
+		ledgerDetail = fmt.Sprintf("Ledger access issue: %v", err)
+		alerts = append(alerts, map[string]string{
+			"Title":        "Ledger synchronization degraded",
+			"Severity":     "Warning",
+			"BadgeVariant": "warning",
+			"Timestamp":    lastUpdated,
+			"Detail":       err.Error(),
+		})
+	}
+
+	streamStatus := "Streaming"
+	streamBadge := "success"
+	streamDetail := "Event fan-out active"
+	if a.stream == nil {
+		streamStatus = "Paused"
+		streamBadge = "secondary"
+		streamDetail = "Event stream disabled"
+	}
+
+	metrics := []map[string]string{
+		{"Title": "Network Uptime", "Value": "99.982%", "Description": "Rolling 30-day availability", "Trend": "↑ Stable", "TrendVariant": "success"},
+		{"Title": "Active Institutions", "Value": "18", "Description": "Connected sovereign actors", "Trend": "3 new this quarter", "TrendVariant": "primary"},
+		{"Title": "Pending Settlements", "Value": "12", "Description": "Awaiting reconciliation", "Trend": "", "TrendVariant": ""},
+		{"Title": "Audit Log (24h)", "Value": "642", "Description": "Recorded governance events", "Trend": "", "TrendVariant": ""},
+	}
+
+	processStatuses := []map[string]string{
+		{"Name": "API readiness", "Status": readyStatus, "Detail": readyDetail, "BadgeVariant": readyBadge},
+		{"Name": "Ledger adapter", "Status": ledgerStatus, "Detail": ledgerDetail, "BadgeVariant": ledgerBadge},
+		{"Name": "Event stream", "Status": streamStatus, "Detail": streamDetail, "BadgeVariant": streamBadge},
+	}
+
+	data := map[string]any{
+		"Title":              "Qazna Control Center",
+		"ContentTemplate":    "content-admin-dashboard",
+		"BodyClass":          "dashboard d-flex flex-column min-vh-100",
+		"Layout":             "dashboard",
+		"ActivePage":         "admin",
+		"Version":            a.version,
+		"LastUpdated":        lastUpdated,
+		"SystemMetrics":      metrics,
+		"ProcessStatuses":    processStatuses,
+		"RecentAlerts":       alerts,
+		"RecentTransactions": a.getRecentTransactions(r.Context(), 8),
+	}
+	a.renderTemplate(w, r, "admin-dashboard", data)
+}
+
+func (a *API) BankDashboard(w http.ResponseWriter, r *http.Request) {
+	lastUpdated := time.Now().UTC().Format("2006-01-02 15:04 MST")
+	bankMetrics := []map[string]string{
+		{"Title": "Reserve balance", "Value": "1.8B QZN", "Description": "Fully collateralised reserves", "Accent": "primary"},
+		{"Title": "Intraday transfers", "Value": "264", "Description": "Processed in the last 24h", "Accent": "success"},
+		{"Title": "Open requests", "Value": "6", "Description": "Awaiting approval", "Accent": "warning"},
+		{"Title": "Compliance status", "Value": "Aligned", "Description": "Basel III / AML / CFT", "Accent": "info"},
+	}
+
+	liquidity := []map[string]string{
+		{"Pool": "USD Correspondent", "Coverage": "112% coverage", "Status": "Balanced", "BadgeVariant": "success"},
+		{"Pool": "EUR TARGET2", "Coverage": "105% coverage", "Status": "Stable", "BadgeVariant": "primary"},
+		{"Pool": "CNY Swap Line", "Coverage": "89% coverage", "Status": "Monitor", "BadgeVariant": "warning"},
+	}
+
+	queue := []map[string]string{
+		{"Counterparty": "Bank of Astana", "SettlementWindow": "T+0 · 14:00 UTC", "Amount": "42.5M QZN"},
+		{"Counterparty": "National Bank of Kazakhstan", "SettlementWindow": "T+0 · 16:30 UTC", "Amount": "18.0M QZN"},
+		{"Counterparty": "Kazakh Sovereign Fund", "SettlementWindow": "T+1 · 09:15 UTC", "Amount": "5.4M QZN"},
+	}
+
+	regions := []map[string]string{
+		{"Region": "Eurasia", "Today": "+58.2M QZN", "Trend": "↑ 12%", "TrendVariant": "success"},
+		{"Region": "MENA", "Today": "+21.7M QZN", "Trend": "→ Stable", "TrendVariant": "primary"},
+		{"Region": "APAC", "Today": "-6.3M QZN", "Trend": "↓ 5%", "TrendVariant": "warning"},
+	}
+
+	data := map[string]any{
+		"Title":              "Central Bank Dashboard",
+		"ContentTemplate":    "content-bank-dashboard",
+		"BodyClass":          "dashboard d-flex flex-column min-vh-100",
+		"Layout":             "dashboard",
+		"ActivePage":         "banks",
+		"InstitutionName":    "Sovereign Reserve Bank",
+		"LastUpdated":        lastUpdated,
+		"BankMetrics":        bankMetrics,
+		"LiquidityOverview":  liquidity,
+		"SettlementQueue":    queue,
+		"RegionalBreakdown":  regions,
+		"RecentTransactions": a.getRecentTransactions(r.Context(), 5),
+	}
+	a.renderTemplate(w, r, "bank-dashboard", data)
 }
 
 // --- helpers ---
@@ -157,6 +284,51 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func (a *API) renderTemplate(w http.ResponseWriter, r *http.Request, tmpl string, data map[string]any) {
+	if a.templates == nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := a.templates.ExecuteTemplate(w, tmpl, data); err != nil {
+		http.Error(w, "template rendering error", http.StatusInternalServerError)
+	}
+}
+
+func (a *API) getRecentTransactions(ctx context.Context, limit int) []map[string]string {
+	if limit <= 0 {
+		limit = 5
+	}
+	txs, _, err := a.ledger.ListTransactions(ctx, limit, 0)
+	if err != nil {
+		return nil
+	}
+	items := make([]map[string]string, 0, len(txs))
+	for _, tx := range txs {
+		items = append(items, map[string]string{
+			"CreatedAt":     formatTimestamp(tx.CreatedAt),
+			"Sequence":      fmt.Sprintf("%d", tx.Sequence),
+			"FromAccountID": tx.FromAccountID,
+			"ToAccountID":   tx.ToAccountID,
+			"Amount":        formatAmount(tx.Amount),
+			"Currency":      tx.Currency,
+		})
+	}
+	return items
+}
+
+func formatAmount(minorUnits int64) string {
+	major := float64(minorUnits) / 100.0
+	return fmt.Sprintf("%0.2f", major)
+}
+
+func formatTimestamp(t time.Time) string {
+	if t.IsZero() {
+		return "—"
+	}
+	return t.UTC().Format("2006-01-02 15:04:05")
 }
 
 func (a *API) resolveLocation(id string) stream.Location {
@@ -168,4 +340,29 @@ func (a *API) resolveLocation(id string) stream.Location {
 		loc.Name = id
 	}
 	return loc
+}
+
+func (a *API) audit(ctx context.Context, action, resourceType, resourceID string, metadata map[string]string) {
+	if a == nil || a.auth == nil {
+		return
+	}
+	principal, ok := auth.PrincipalFromContext(ctx)
+	if !ok || principal.User == nil {
+		return
+	}
+	if metadata == nil {
+		metadata = map[string]string{}
+	}
+	entry := &auth.AuditEntry{
+		ActorUserID:  principal.User.ID,
+		ActorOrgID:   principal.User.OrganizationID,
+		Action:       action,
+		ResourceType: resourceType,
+		ResourceID:   resourceID,
+		Metadata:     metadata,
+		TraceID:      RequestIDFromContext(ctx),
+	}
+	if err := a.auth.AppendAudit(ctx, entry); err != nil {
+		log.Printf("audit append failed: %v", err)
+	}
 }

@@ -24,7 +24,7 @@
 
     .flow {
         fill: none;
-        stroke: #00ABC2;
+        stroke: #0d6efd;
         stroke-width: 30;
         stroke-linecap: round;
         stroke-dasharray: 60;

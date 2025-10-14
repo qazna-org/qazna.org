@@ -1,0 +1,125 @@
+{{define "admin-dashboard"}}
+<!doctype html>
+<html lang="en" class="h-100">
+  {{template "head" .}}
+  <body class="h-100 dashboard d-flex flex-column min-vh-100">
+    {{template "siteHeader" .}}
+    <main class="flex-grow-1 py-4">
+      <div class="container">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+          <div>
+            <h1 class="h3 mb-1">Qazna Control Center</h1>
+            <p class="text-muted mb-0">Version {{.Version}} · Last update {{.LastUpdated}}</p>
+          </div>
+          <div class="d-flex gap-2">
+            <a class="btn btn-primary" href="/openapi.yaml" target="_blank" rel="noopener">View API Spec</a>
+            <a class="btn btn-outline-secondary" href="https://qazna.org/transparency" target="_blank" rel="noopener">Transparency Portal</a>
+          </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+          {{range .SystemMetrics}}
+          <div class="col-12 col-md-6 col-xl-3">
+            <div class="p-4 bg-white stat-card h-100">
+              <span class="text-uppercase text-muted small">{{.Title}}</span>
+              <h3 class="mt-2 mb-1">{{.Value}}</h3>
+              <p class="mb-0 text-muted">{{.Description}}</p>
+              {{if .Trend}}
+              <span class="badge bg-{{.TrendVariant}} mt-3">{{.Trend}}</span>
+              {{end}}
+            </div>
+          </div>
+          {{end}}
+        </div>
+
+        <div class="row g-4 mb-4">
+          <div class="col-12 col-xl-6">
+            <div class="card h-100">
+              <div class="card-header bg-white">
+                <h2 class="h6 mb-0">Operational Signals</h2>
+              </div>
+              <div class="card-body">
+                <div class="list-group list-group-flush">
+                  {{range .ProcessStatuses}}
+                  <div class="list-group-item px-0 d-flex justify-content-between align-items-start">
+                    <div>
+                      <div class="fw-semibold">{{.Name}}</div>
+                      <div class="small text-muted">{{.Detail}}</div>
+                    </div>
+                    <span class="badge bg-{{.BadgeVariant}}">{{.Status}}</span>
+                  </div>
+                  {{end}}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-12 col-xl-6">
+            <div class="card h-100">
+              <div class="card-header bg-white">
+                <h2 class="h6 mb-0">Network Alerts</h2>
+              </div>
+              <div class="card-body">
+                {{if .RecentAlerts}}
+                <div class="list-group list-group-flush">
+                  {{range .RecentAlerts}}
+                  <div class="list-group-item px-0">
+                    <div class="d-flex justify-content-between align-items-center">
+                      <div class="fw-semibold">{{.Title}}</div>
+                      <span class="badge bg-{{.BadgeVariant}}">{{.Severity}}</span>
+                    </div>
+                    <div class="small text-muted">{{.Timestamp}}</div>
+                    <p class="mb-0 mt-1">{{.Detail}}</p>
+                  </div>
+                  {{end}}
+                </div>
+                {{else}}
+                <p class="text-muted mb-0">No active alerts. All systems balanced.</p>
+                {{end}}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-5">
+          <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <h2 class="h6 mb-0">Recent Settlement Activity</h2>
+            <a class="btn btn-sm btn-outline-primary" href="/v1/ledger/transactions?limit=50">View ledger feed</a>
+          </div>
+          <div class="table-responsive">
+            <table class="table align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th scope="col">Timestamp (UTC)</th>
+                  <th scope="col">Sequence</th>
+                  <th scope="col">Origin</th>
+                  <th scope="col">Destination</th>
+                  <th scope="col" class="text-end">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{if .RecentTransactions}}
+                {{range .RecentTransactions}}
+                <tr>
+                  <td>{{.CreatedAt}}</td>
+                  <td>{{.Sequence}}</td>
+                  <td><span class="badge text-bg-light">{{.FromAccountID}}</span></td>
+                  <td><span class="badge text-bg-light">{{.ToAccountID}}</span></td>
+                  <td class="text-end">{{.Amount}} {{.Currency}}</td>
+                </tr>
+                {{end}}
+                {{else}}
+                <tr>
+                  <td colspan="5" class="text-center text-muted py-4">No settlement activity recorded yet.</td>
+                </tr>
+                {{end}}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+    {{template "siteFooter" .}}
+    {{template "scripts" .}}
+  </body>
+</html>
+{{end}}

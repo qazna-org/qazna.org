@@ -16,6 +16,7 @@ type User struct {
 	ID             string
 	OrganizationID string
 	Email          string
+	PasswordHash   string
 	Status         string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
@@ -64,4 +65,14 @@ type Assignment struct {
 type RolePermission struct {
 	RoleID       string
 	PermissionID string
+}
+
+// RefreshToken represents a persisted refresh token.
+type RefreshToken struct {
+	ID         string
+	UserID     string
+	TokenHash  string
+	ExpiresAt  time.Time
+	CreatedAt  time.Time
+	Revoked    bool
 }

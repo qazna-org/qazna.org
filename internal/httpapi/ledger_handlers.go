@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"qazna.org/internal/auth"
 	"qazna.org/internal/ledger"
 	"qazna.org/internal/stream"
 )
@@ -91,6 +92,11 @@ func (a *API) handleTransactions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) createAccount(w http.ResponseWriter, r *http.Request) {
+	if err := a.requirePermission(r.Context(), auth.PermLedgerCreateAccount); err != nil {
+		handleAuthError(w, err)
+		return
+	}
+
 	var req createAccountRequest
 	if err := decodeJSON(w, r, &req); err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
@@ -114,6 +120,11 @@ func (a *API) createAccount(w http.ResponseWriter, r *http.Request) {
 		handleLedgerError(w, err)
 		return
 	}
+
+	a.audit(r.Context(), "ledger.account.create", "account", acc.ID, map[string]string{
+		"currency":       strings.ToUpper(req.Currency),
+		"initial_amount": strconv.FormatInt(req.InitialAmount, 10),
+	})
 
 	w.Header().Set("Location", "/v1/accounts/"+acc.ID)
 	writeJSON(w, http.StatusCreated, acc)
@@ -143,6 +154,11 @@ func (a *API) getBalance(w http.ResponseWriter, r *http.Request, id string) {
 }
 
 func (a *API) transfer(w http.ResponseWriter, r *http.Request) {
+	if err := a.requirePermission(r.Context(), auth.PermLedgerTransfer); err != nil {
+		handleAuthError(w, err)
+		return
+	}
+
 	var req transferRequest
 	if err := decodeJSON(w, r, &req); err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
@@ -203,6 +219,17 @@ func (a *API) transfer(w http.ResponseWriter, r *http.Request) {
 		a.stream.Publish(event)
 	}
 
+	meta := map[string]string{
+		"from_account": strings.TrimSpace(req.FromID),
+		"to_account":   strings.TrimSpace(req.ToID),
+		"currency":     strings.ToUpper(req.Currency),
+		"amount":       strconv.FormatInt(req.Amount, 10),
+	}
+	if idem != "" {
+		meta["idempotency_key"] = idem
+	}
+	a.audit(r.Context(), "ledger.transfer.execute", "transaction", tx.ID, meta)
+
 	writeJSON(w, http.StatusCreated, tx)
 }
 
@@ -235,6 +262,17 @@ func (a *API) listTransactions(w http.ResponseWriter, r *http.Request) {
 		AsOf:      time.Now().UTC(),
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func handleAuthError(w http.ResponseWriter, err error) {
+	switch {
+	case err == nil:
+		return
+	case errors.Is(err, auth.ErrUnauthorized):
+		respondError(w, http.StatusForbidden, "permission denied")
+	default:
+		respondError(w, http.StatusInternalServerError, "authorization error")
+	}
 }
 
 func parsePositiveInt(raw string, def, min, max int) (int, error) {

@@ -48,10 +48,38 @@ paths:
                   version: { type: string }
                   time: { type: string, format: date-time }
 
+  /v1/auth/token:
+    post:
+      tags: [Auth]
+      summary: Issue or refresh tokens
+      description: |
+        Supports two OAuth2-compatible grants:
+        * `password` — authenticates a user by email and password
+        * `refresh_token` — rotates tokens using a previously issued refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TokenRequest"
+      responses:
+        "200":
+          description: Token pair
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          description: Invalid request
+        "401":
+          description: Invalid credentials or refresh token
+
   /v1/accounts:
     post:
       tags: [Accounts]
       summary: Create account
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -150,6 +178,8 @@ paths:
           description: Account not found
         "409":
           description: Insufficient funds
+      security:
+        - BearerAuth: []
 
   /v1/ledger/transactions:
     get:
@@ -184,7 +214,34 @@ paths:
                     format: date-time
 
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: qazna-hmac
+      description: >
+        Signed bearer token issued by the authorization service.
+
   schemas:
+    TokenRequest:
+      type: object
+      properties:
+        grant_type: { type: string, enum: [password, refresh_token] }
+        email:      { type: string, format: email }
+        password:   { type: string }
+        refresh_token: { type: string }
+      required: [grant_type]
+
+    TokenResponse:
+      type: object
+      properties:
+        access_token:       { type: string }
+        token_type:         { type: string, example: Bearer }
+        expires_in:         { type: integer, example: 900 }
+        expires_at:         { type: string, format: date-time }
+        refresh_token:      { type: string }
+        refresh_expires_at: { type: string, format: date-time }
+
     Money:
       type: object
       properties:

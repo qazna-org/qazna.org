@@ -5,10 +5,12 @@ import (
 	"time"
 
 	v1 "qazna.org/api/gen/go/api/proto/qazna/v1"
+	"qazna.org/internal/auth"
 	"qazna.org/internal/ledger"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 // Client wraps the gRPC ledger service.
@@ -45,6 +47,7 @@ type Service struct {
 func NewService(client *Client) *Service { return &Service{client: client} }
 
 func (s *Service) CreateAccount(ctx context.Context, initial ledger.Money) (ledger.Account, error) {
+	ctx = outgoingWithIdentity(ctx)
 	resp, err := s.client.svc.CreateAccount(ctx, &v1.CreateAccountRequest{
 		Currency:      initial.Currency,
 		InitialAmount: initial.Amount,
@@ -56,6 +59,7 @@ func (s *Service) CreateAccount(ctx context.Context, initial ledger.Money) (ledg
 }
 
 func (s *Service) GetAccount(ctx context.Context, id string) (ledger.Account, error) {
+	ctx = outgoingWithIdentity(ctx)
 	resp, err := s.client.svc.GetAccount(ctx, &v1.GetAccountRequest{Id: id})
 	if err != nil {
 		return ledger.Account{}, err
@@ -64,6 +68,7 @@ func (s *Service) GetAccount(ctx context.Context, id string) (ledger.Account, er
 }
 
 func (s *Service) GetBalance(ctx context.Context, id, currency string) (ledger.Money, error) {
+	ctx = outgoingWithIdentity(ctx)
 	resp, err := s.client.svc.GetBalance(ctx, &v1.GetBalanceRequest{Id: id, Currency: currency})
 	if err != nil {
 		return ledger.Money{}, err
@@ -72,6 +77,7 @@ func (s *Service) GetBalance(ctx context.Context, id, currency string) (ledger.M
 }
 
 func (s *Service) Transfer(ctx context.Context, fromID, toID string, amt ledger.Money, idemKey string) (ledger.Transaction, error) {
+	ctx = outgoingWithIdentity(ctx)
 	resp, err := s.client.svc.Transfer(ctx, &v1.TransferRequest{
 		FromId:         fromID,
 		ToId:           toID,
@@ -89,6 +95,7 @@ func (s *Service) ListTransactions(ctx context.Context, limit int, afterSeq uint
 	if limit <= 0 {
 		limit = 100
 	}
+	ctx = outgoingWithIdentity(ctx)
 	resp, err := s.client.svc.ListTransactions(ctx, &v1.ListTransactionsRequest{
 		AfterSequence: afterSeq,
 		Limit:         uint32(limit),
@@ -104,6 +111,28 @@ func (s *Service) ListTransactions(ctx context.Context, limit int, afterSeq uint
 }
 
 // Helpers -----------------------------------------------------------------
+
+func outgoingWithIdentity(ctx context.Context) context.Context {
+	if ctx == nil {
+		return ctx
+	}
+	var pairs []string
+	if token, ok := auth.TokenFromContext(ctx); ok {
+		pairs = append(pairs, "authorization", "Bearer "+token)
+	}
+	if principal, ok := auth.PrincipalFromContext(ctx); ok {
+		if principal.User != nil {
+			pairs = append(pairs, "x-qazna-user-id", principal.User.ID)
+			if principal.User.OrganizationID != "" {
+				pairs = append(pairs, "x-qazna-org-id", principal.User.OrganizationID)
+			}
+		}
+	}
+	if len(pairs) == 0 {
+		return ctx
+	}
+	return metadata.AppendToOutgoingContext(ctx, pairs...)
+}
 
 func fromProtoAccount(a *v1.Account) ledger.Account {
 	balances := make(map[string]int64, len(a.Balances))

@@ -17,6 +17,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	v1 "qazna.org/api/gen/go/api/proto/qazna/v1"
+	"qazna.org/internal/auth"
 	"qazna.org/internal/httpapi"
 	"qazna.org/internal/ledger"
 	"qazna.org/internal/ledger/remote"
@@ -39,29 +40,69 @@ func main() {
 
 	// Choose ledger backend: remote gRPC, Postgres (DSN), or in-memory.
 	var (
-		db         *sql.DB
-		ledgerSvc  ledger.Service
-		storeClose func() error
+		db           *sql.DB
+		ledgerSvc    ledger.Service
+		storeClose   func() error
 		remoteClient *remote.Client
+		authSvc      *auth.Service
 	)
-    if addr := os.Getenv("QAZNA_LEDGER_GRPC_ADDR"); addr != "" {
-        ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-        client, err := remote.Dial(ctx, addr)
-        cancel()
-        if err != nil {
-            log.Fatalf("dial remote ledger: %v", err)
-        }
-        ledgerSvc = remote.NewService(client)
-        remoteClient = client
-        log.Printf("Using remote ledger at %s", addr)
-    } else if dsn := os.Getenv("QAZNA_PG_DSN"); dsn != "" {
-		store, err := pg.Open(dsn)
+	if addr := os.Getenv("QAZNA_LEDGER_GRPC_ADDR"); addr != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		client, err := remote.Dial(ctx, addr)
+		cancel()
 		if err != nil {
-			log.Fatalf("open db: %v", err)
+			log.Fatalf("dial remote ledger: %v", err)
+		}
+		ledgerSvc = remote.NewService(client)
+		remoteClient = client
+		log.Printf("Using remote ledger at %s", addr)
+	} else if dsn := os.Getenv("QAZNA_PG_DSN"); dsn != "" {
+		store, errPG := pg.Open(dsn)
+		if errPG != nil {
+			log.Fatalf("open db: %v", errPG)
 		}
 		db = store.DB()
 		ledgerSvc = store
 		storeClose = store.Close
+
+		authOpts := []auth.ServiceOption{}
+		privateKey := os.Getenv("QAZNA_AUTH_PRIVATE_KEY")
+		publicKey := os.Getenv("QAZNA_AUTH_PUBLIC_KEY")
+		if strings.TrimSpace(privateKey) == "" || strings.TrimSpace(publicKey) == "" {
+			log.Fatalf("auth signing keys are required (QAZNA_AUTH_PRIVATE_KEY / QAZNA_AUTH_PUBLIC_KEY)")
+		}
+		authOpts = append(authOpts, auth.WithRS256Keys(privateKey, publicKey))
+		if kid := os.Getenv("QAZNA_AUTH_KEY_ID"); kid != "" {
+			authOpts = append(authOpts, auth.WithKeyID(kid))
+		}
+		if issuer := os.Getenv("QAZNA_AUTH_ISSUER"); issuer != "" {
+			authOpts = append(authOpts, auth.WithIssuer(issuer))
+		}
+		if accessTTL := strings.TrimSpace(os.Getenv("QAZNA_AUTH_ACCESS_TTL")); accessTTL != "" {
+			d, err := time.ParseDuration(accessTTL)
+			if err != nil {
+				log.Fatalf("parse QAZNA_AUTH_ACCESS_TTL: %v", err)
+			}
+			authOpts = append(authOpts, auth.WithAccessTTL(d))
+		}
+		if refreshTTL := strings.TrimSpace(os.Getenv("QAZNA_AUTH_REFRESH_TTL")); refreshTTL != "" {
+			d, err := time.ParseDuration(refreshTTL)
+			if err != nil {
+				log.Fatalf("parse QAZNA_AUTH_REFRESH_TTL: %v", err)
+			}
+			authOpts = append(authOpts, auth.WithRefreshTTL(d))
+		}
+		var err error
+		authSvc, err = auth.NewService(auth.NewPGStore(db), authOpts...)
+		if err != nil {
+			log.Fatalf("init auth service: %v", err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := authSvc.EnsureBuiltins(ctx); err != nil {
+			cancel()
+			log.Fatalf("ensure auth builtins: %v", err)
+		}
+		cancel()
 	} else {
 		ledgerSvc = ledger.NewInMemory()
 	}
@@ -73,7 +114,7 @@ func main() {
 	evtStream := stream.New()
 
 	// HTTP API setup.
-	api := httpapi.New(rp, version, ledgerSvc, evtStream, tmpl)
+	api := httpapi.New(rp, version, ledgerSvc, evtStream, tmpl, authSvc)
 
 	srv := &http.Server{
 		Addr:              ":8080",
@@ -99,8 +140,12 @@ func main() {
 		grpcAddr = ":9090"
 	}
 
-	grpcSrv := grpc.NewServer()
-	grpcAPI := httpapi.NewGRPCServer(rp, version)
+	var grpcOpts []grpc.ServerOption
+	if authSvc != nil && authSvc.SupportsTokens() {
+		grpcOpts = append(grpcOpts, grpc.UnaryInterceptor(httpapi.UnaryAuthInterceptor(authSvc)))
+	}
+	grpcSrv := grpc.NewServer(grpcOpts...)
+	grpcAPI := httpapi.NewGRPCServer(rp, version, authSvc)
 	v1.RegisterInfoServiceServer(grpcSrv, grpcAPI)
 	v1.RegisterHealthServiceServer(grpcSrv, grpcAPI)
 

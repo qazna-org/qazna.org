@@ -1,0 +1,3 @@
+./buildinfo.go
+./metrics.go
+./metrics_test.go
