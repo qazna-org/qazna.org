@@ -1,0 +1,78 @@
+{{define "dashboardSidebar"}}
+<aside class="dashboard-sidebar d-none d-lg-flex flex-column">
+  <div class="mb-4">
+    <h2 class="h6 text-uppercase text-white-50 mb-3">Navigation</h2>
+    <nav class="nav nav-pills flex-column gap-1">
+      <a class="nav-link d-flex align-items-center gap-2 {{if eq .ActivePage "admin"}} active{{end}}" href="/admin/dashboard">
+        <i class="bi bi-speedometer"></i>
+        <span>Control Center</span>
+      </a>
+      <a class="nav-link d-flex align-items-center gap-2 {{if eq .ActivePage "banks"}} active{{end}}" href="/banks/dashboard">
+        <i class="bi bi-bank"></i>
+        <span>Central Banks</span>
+      </a>
+      <a class="nav-link d-flex align-items-center gap-2" href="/v1/ledger/transactions?limit=50">
+        <i class="bi bi-diagram-3"></i>
+        <span>Ledger Feed</span>
+      </a>
+      <a class="nav-link d-flex align-items-center gap-2" href="/openapi.yaml" target="_blank" rel="noopener">
+        <i class="bi bi-file-earmark-code"></i>
+        <span>API Specification</span>
+      </a>
+    </nav>
+  </div>
+  <div class="mt-auto">
+    <h2 class="h6 text-uppercase text-white-50 mb-3">Governance</h2>
+    <nav class="nav nav-pills flex-column gap-1">
+      <a class="nav-link d-flex align-items-center gap-2" href="https://qazna.org/transparency" target="_blank" rel="noopener">
+        <i class="bi bi-shield-check"></i>
+        <span>Transparency Portal</span>
+      </a>
+      <a class="nav-link d-flex align-items-center gap-2" href="https://qazna.org" target="_blank" rel="noopener">
+        <i class="bi bi-people"></i>
+        <span>Foundation Site</span>
+      </a>
+    </nav>
+  </div>
+</aside>
+
+<div class="offcanvas offcanvas-start dashboard-offcanvas" tabindex="-1" id="sidebarOffcanvas" aria-labelledby="sidebarOffcanvasLabel">
+  <div class="offcanvas-header">
+    <h2 class="h6 mb-0" id="sidebarOffcanvasLabel">Navigation</h2>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body d-flex flex-column gap-4">
+    <nav class="nav nav-pills flex-column gap-1">
+      <a class="nav-link d-flex align-items-center gap-2 {{if eq .ActivePage "admin"}} active{{end}}" href="/admin/dashboard" data-bs-dismiss="offcanvas">
+        <i class="bi bi-speedometer2"></i>
+        <span>Control Center</span>
+      </a>
+      <a class="nav-link d-flex align-items-center gap-2 {{if eq .ActivePage "banks"}} active{{end}}" href="/banks/dashboard" data-bs-dismiss="offcanvas">
+        <i class="bi bi-bank"></i>
+        <span>Central Banks</span>
+      </a>
+      <a class="nav-link d-flex align-items-center gap-2" href="/v1/ledger/transactions?limit=50" data-bs-dismiss="offcanvas">
+        <i class="bi bi-diagram-3"></i>
+        <span>Ledger Feed</span>
+      </a>
+      <a class="nav-link d-flex align-items-center gap-2" href="/openapi.yaml" target="_blank" rel="noopener">
+        <i class="bi bi-file-earmark-code"></i>
+        <span>API Specification</span>
+      </a>
+    </nav>
+    <div>
+      <h2 class="h6 text-uppercase text-white-50 mb-3">Governance</h2>
+      <nav class="nav nav-pills flex-column gap-1">
+        <a class="nav-link d-flex align-items-center gap-2" href="https://qazna.org/transparency" target="_blank" rel="noopener">
+          <i class="bi bi-shield-check"></i>
+          <span>Transparency Portal</span>
+        </a>
+        <a class="nav-link d-flex align-items-center gap-2" href="https://qazna.org" target="_blank" rel="noopener">
+          <i class="bi bi-people"></i>
+          <span>Foundation Site</span>
+        </a>
+      </nav>
+    </div>
+  </div>
+</div>
+{{end}}

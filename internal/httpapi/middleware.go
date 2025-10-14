@@ -147,6 +147,7 @@ func SecurityHeaders(next http.Handler) http.Handler {
 				"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "+
 				"script-src 'self' https://cdn.jsdelivr.net; "+
 				"connect-src 'self' https://cdn.jsdelivr.net; "+
+				"font-src 'self' https://cdn.jsdelivr.net data:; "+
 				"worker-src 'self' blob:; "+
 				"frame-ancestors 'none'")
 		next.ServeHTTP(w, r)

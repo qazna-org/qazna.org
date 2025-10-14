@@ -2,15 +2,18 @@
 <!doctype html>
 <html lang="en" class="h-100">
   {{template "head" .}}
-  <body class="h-100 dashboard d-flex flex-column min-vh-100">
+  <body class="h-100 dashboard-layout">
     {{template "siteHeader" .}}
-    <main class="flex-grow-1 py-4">
-      <div class="container">
-        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
-          <div>
-            <h1 class="h3 mb-1">Qazna Control Center</h1>
-            <p class="text-muted mb-0">Version {{.Version}} · Last update {{.LastUpdated}}</p>
-          </div>
+    <div class="dashboard-wrapper">
+      {{template "dashboardSidebar" .}}
+      <div class="dashboard-main flex-grow-1">
+        <main>
+          <div class="container">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+              <div>
+                <h1 class="h3 mb-1">Qazna Control Center</h1>
+                <p class="text-muted mb-0">Version {{.Version}} · Last update {{.LastUpdated}}</p>
+              </div>
           <div class="d-flex gap-2">
             <a class="btn btn-primary" href="/openapi.yaml" target="_blank" rel="noopener">View API Spec</a>
             <a class="btn btn-outline-secondary" href="https://qazna.org/transparency" target="_blank" rel="noopener">Transparency Portal</a>
@@ -116,9 +119,10 @@
             </table>
           </div>
         </div>
+        </main>
+        {{template "siteFooter" .}}
       </div>
-    </main>
-    {{template "siteFooter" .}}
+    </div>
     {{template "scripts" .}}
   </body>
 </html>

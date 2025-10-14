@@ -2,15 +2,18 @@
 <!doctype html>
 <html lang="en" class="h-100">
   {{template "head" .}}
-  <body class="h-100 dashboard d-flex flex-column min-vh-100">
+  <body class="h-100 dashboard-layout">
     {{template "siteHeader" .}}
-    <main class="flex-grow-1 py-4">
-      <div class="container">
-        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
-          <div>
-            <h1 class="h3 mb-1">Central Bank Operations Desk</h1>
-            <p class="text-muted mb-0">Welcome, {{.InstitutionName}} · Liquidity position as of {{.LastUpdated}}</p>
-          </div>
+    <div class="dashboard-wrapper">
+      {{template "dashboardSidebar" .}}
+      <div class="dashboard-main flex-grow-1">
+        <main>
+          <div class="container">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+              <div>
+                <h1 class="h3 mb-1">Central Bank Operations Desk</h1>
+                <p class="text-muted mb-0">Welcome, {{.InstitutionName}} · Liquidity position as of {{.LastUpdated}}</p>
+              </div>
           <div class="d-flex gap-2">
             <button class="btn btn-primary" type="button">Initiate Settlement</button>
             <button class="btn btn-outline-secondary" type="button">Export Daily Report</button>
@@ -152,9 +155,10 @@
             </div>
           </div>
         </div>
+        </main>
+        {{template "siteFooter" .}}
       </div>
-    </main>
-    {{template "siteFooter" .}}
+    </div>
     {{template "scripts" .}}
   </body>
 </html>

@@ -2,7 +2,7 @@
 {{- $layout := .Layout -}}
 {{- $active := .ActivePage -}}
 {{if eq $layout "map"}}
-<header class="qz-header">
+<header class="qz-header shadow-sm">
   <nav class="navbar navbar-expand-lg navbar-dark">
     <div class="container-fluid px-4">
       <a class="navbar-brand d-flex align-items-center gap-2" href="/">
@@ -33,9 +33,20 @@
   </nav>
 </header>
 {{else}}
-<header class="shadow-sm">
-  <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+<header class="shadow-sm {{if eq $layout "dashboard"}}bg-primary{{end}}">
+  <nav class="navbar navbar-expand-lg navbar-dark {{if eq $layout "dashboard"}}bg-primary{{else}}bg-primary{{end}}">
     <div class="container">
+      {{if eq $layout "dashboard"}}
+      <button
+        class="btn btn-link text-white d-lg-none me-2"
+        type="button"
+        data-bs-toggle="offcanvas"
+        data-bs-target="#sidebarOffcanvas"
+        aria-controls="sidebarOffcanvas"
+      >
+        <i class="bi bi-list" style="font-size: 1.5rem;"></i>
+      </button>
+      {{end}}
       <a class="navbar-brand d-flex align-items-center gap-2" href="/">
         <img src="/assets/brand/logo.svg" alt="Qazna" style="width: 32px; height: 32px;" />
         <span>Qazna</span>
