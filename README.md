@@ -164,7 +164,7 @@ These include:
 
 ## 🕊️ Contact
 
-📧 General inquiries: info@qazna.org  
+📧 General inquiries: qazna.info@gmail.com  
 🔒 Security reports: security@qazna.org  
 🌐 Website: https://qazna.org
 
