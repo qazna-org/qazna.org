@@ -1,8 +1,5 @@
-{{define "siteHeader"}}
-{{- $layout := .Layout -}}
-{{- $active := .ActivePage -}}
-{{if eq $layout "map"}}
-<header class="qz-header shadow-sm">
+{{define "siteHeaderPublic"}}
+<header class="qz-header">
   <nav class="navbar navbar-expand-lg navbar-dark">
     <div class="container-fluid px-4">
       <a class="navbar-brand d-flex align-items-center gap-2" href="/">
@@ -13,60 +10,16 @@
         class="navbar-toggler"
         type="button"
         data-bs-toggle="collapse"
-        data-bs-target="#mainNav"
-        aria-controls="mainNav"
+        data-bs-target="#publicNav"
+        aria-controls="publicNav"
         aria-expanded="false"
         aria-label="Toggle navigation"
       >
         <span class="navbar-toggler-icon"></span>
       </button>
-      <div class="collapse navbar-collapse" id="mainNav">
+      <div class="collapse navbar-collapse" id="publicNav">
         <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
-          <li class="nav-item"><a class="nav-link {{if eq $active "map"}}active{{end}}" href="/">Global Flow</a></li>
-          <li class="nav-item"><a class="nav-link {{if eq $active "admin"}}active{{end}}" href="/admin/dashboard">Admin Console</a></li>
-          <li class="nav-item"><a class="nav-link {{if eq $active "banks"}}active{{end}}" href="/banks/dashboard">Central Banks</a></li>
-          <li class="nav-item"><a class="nav-link" href="https://qazna.org" target="_blank" rel="noopener">Foundation</a></li>
-          <li class="nav-item"><a class="nav-link" href="/openapi.yaml" target="_blank" rel="noopener">API Spec</a></li>
-        </ul>
-      </div>
-    </div>
-  </nav>
-</header>
-{{else}}
-<header class="shadow-sm {{if eq $layout "dashboard"}}bg-primary{{end}}">
-  <nav class="navbar navbar-expand-lg navbar-dark {{if eq $layout "dashboard"}}bg-primary{{else}}bg-primary{{end}}">
-    <div class="container">
-      {{if eq $layout "dashboard"}}
-      <button
-        class="btn btn-link text-white d-lg-none me-2"
-        type="button"
-        data-bs-toggle="offcanvas"
-        data-bs-target="#sidebarOffcanvas"
-        aria-controls="sidebarOffcanvas"
-      >
-        <i class="bi bi-list" style="font-size: 1.5rem;"></i>
-      </button>
-      {{end}}
-      <a class="navbar-brand d-flex align-items-center gap-2" href="/">
-        <img src="/assets/brand/logo.svg" alt="Qazna" style="width: 32px; height: 32px;" />
-        <span>Qazna</span>
-      </a>
-      <button
-        class="navbar-toggler"
-        type="button"
-        data-bs-toggle="collapse"
-        data-bs-target="#mainNav"
-        aria-controls="mainNav"
-        aria-expanded="false"
-        aria-label="Toggle navigation"
-      >
-        <span class="navbar-toggler-icon"></span>
-      </button>
-      <div class="collapse navbar-collapse" id="mainNav">
-        <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
-          <li class="nav-item"><a class="nav-link {{if eq $active "map"}}active{{end}}" href="/">Global Flow</a></li>
-          <li class="nav-item"><a class="nav-link {{if eq $active "admin"}}active{{end}}" href="/admin/dashboard">Admin Console</a></li>
-          <li class="nav-item"><a class="nav-link {{if eq $active "banks"}}active{{end}}" href="/banks/dashboard">Central Banks</a></li>
+          <li class="nav-item"><a class="nav-link {{if eq .ActivePage "map"}}active{{end}}" href="/">Global Flow</a></li>
           <li class="nav-item"><a class="nav-link" href="https://qazna.org" target="_blank" rel="noopener">Foundation</a></li>
           <li class="nav-item"><a class="nav-link" href="/openapi.yaml" target="_blank" rel="noopener">API Spec</a></li>
         </ul>
@@ -75,4 +28,44 @@
   </nav>
 </header>
 {{end}}
+
+{{define "siteHeaderDashboard"}}
+<header class="qz-header-dashboard navbar navbar-expand-lg navbar-dark bg-primary">
+  <div class="container-fluid px-3">
+    <div class="d-flex align-items-center gap-2">
+      <button
+        class="btn btn-link text-white d-lg-none"
+        type="button"
+        data-bs-toggle="offcanvas"
+        data-bs-target="#sidebarOffcanvas"
+        aria-controls="sidebarOffcanvas"
+      >
+        <i class="bi bi-list"></i>
+      </button>
+      <a class="navbar-brand d-flex align-items-center gap-2" href="/">
+        <img src="/assets/brand/logo.svg" alt="Qazna" style="width: 32px; height: 32px;" />
+        <span class="fw-semibold">Qazna</span>
+      </a>
+    </div>
+    <button
+      class="navbar-toggler"
+      type="button"
+      data-bs-toggle="collapse"
+      data-bs-target="#dashboardNav"
+      aria-controls="dashboardNav"
+      aria-expanded="false"
+      aria-label="Toggle navigation"
+    >
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="dashboardNav">
+      <ul class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-lg-center gap-lg-2">
+        <li class="nav-item"><a class="nav-link {{if eq .ActivePage "admin"}}active{{end}}" href="/admin/dashboard"><i class="bi bi-speedometer2 me-1"></i> Admin Console</a></li>
+        <li class="nav-item"><a class="nav-link {{if eq .ActivePage "banks"}}active{{end}}" href="/banks/dashboard"><i class="bi bi-bank me-1"></i> Central Banks</a></li>
+        <li class="nav-item"><a class="nav-link" href="/openapi.yaml" target="_blank" rel="noopener"><i class="bi bi-file-earmark-code me-1"></i> API Spec</a></li>
+        <li class="nav-item"><a class="nav-link" href="https://qazna.org/transparency" target="_blank" rel="noopener"><i class="bi bi-shield-check me-1"></i> Transparency</a></li>
+      </ul>
+    </div>
+  </div>
+</header>
 {{end}}
