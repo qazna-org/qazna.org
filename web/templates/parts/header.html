@@ -59,12 +59,141 @@
       <span class="navbar-toggler-icon"></span>
     </button>
     <div class="collapse navbar-collapse" id="dashboardNav">
-      <ul class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-lg-center gap-lg-2">
-        <li class="nav-item"><a class="nav-link {{if eq .ActivePage "admin"}}active{{end}}" href="/admin/dashboard"><i class="bi bi-speedometer2 me-1"></i> Admin Console</a></li>
-        <li class="nav-item"><a class="nav-link {{if eq .ActivePage "banks"}}active{{end}}" href="/banks/dashboard"><i class="bi bi-bank me-1"></i> Central Banks</a></li>
-        <li class="nav-item"><a class="nav-link" href="/openapi.yaml" target="_blank" rel="noopener"><i class="bi bi-file-earmark-code me-1"></i> API Spec</a></li>
-        <li class="nav-item"><a class="nav-link" href="https://qazna.org/transparency" target="_blank" rel="noopener"><i class="bi bi-shield-check me-1"></i> Transparency</a></li>
-      </ul>
+      {{- $notifications := .HeaderNotifications -}}
+      {{- $notificationCount := len $notifications -}}
+      {{- $messages := .HeaderMessages -}}
+      {{- $messageCount := len $messages -}}
+      {{- $user := .HeaderUser -}}
+      <div class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-lg-center gap-2 gap-lg-3 qz-dashboard-nav">
+        <div class="nav-item dropdown">
+          <a
+            class="nav-link dropdown-toggle position-relative"
+            href="#"
+            id="notificationsDropdown"
+            role="button"
+            data-bs-toggle="dropdown"
+            aria-expanded="false"
+            aria-label="Notifications"
+          >
+            <i class="bi bi-bell-fill fs-5"></i>
+            <span class="d-lg-none ms-2">Notifications</span>
+            {{- if gt $notificationCount 0 -}}
+            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+              {{$notificationCount}}
+              <span class="visually-hidden">unread notifications</span>
+            </span>
+            {{- end -}}
+          </a>
+          <div class="dropdown-menu dropdown-menu-end shadow qz-dropdown-menu" aria-labelledby="notificationsDropdown">
+            <div class="dropdown-header d-flex justify-content-between align-items-center">
+              <span>Notifications</span>
+              <span class="badge text-bg-primary">{{if gt $notificationCount 0}}{{$notificationCount}}{{else}}0{{end}}</span>
+            </div>
+            {{- if gt $notificationCount 0 -}}
+              {{- range $notifications -}}
+              <div class="dropdown-item-text">
+                <div class="d-flex justify-content-between align-items-start">
+                  <span class="fw-semibold">{{.Title}}</span>
+                  {{- with .Time -}}<small class="text-muted ms-2">{{.}}</small>{{- end -}}
+                </div>
+                {{- with .Description -}}<div class="small text-muted">{{.}}</div>{{- end -}}
+                {{- if or .BadgeVariant .BadgeLabel -}}
+                <span class="badge text-bg-{{if .BadgeVariant}}{{.BadgeVariant}}{{else}}secondary{{end}} mt-2">
+                  {{- if .BadgeLabel -}}{{.BadgeLabel}}{{else}}Status{{end}}
+                </span>
+                {{- end -}}
+              </div>
+              {{- end -}}
+            {{- else -}}
+              <div class="dropdown-item-text text-muted small">No new notifications.</div>
+            {{- end -}}
+            <div class="dropdown-divider"></div>
+            <button type="button" class="dropdown-item text-center text-primary">View all notifications</button>
+          </div>
+        </div>
+        <div class="nav-item dropdown">
+          <a
+            class="nav-link dropdown-toggle position-relative"
+            href="#"
+            id="messagesDropdown"
+            role="button"
+            data-bs-toggle="dropdown"
+            aria-expanded="false"
+            aria-label="Messages"
+          >
+            <i class="bi bi-chat-dots-fill fs-5"></i>
+            <span class="d-lg-none ms-2">Messages</span>
+            {{- if gt $messageCount 0 -}}
+            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-success">
+              {{$messageCount}}
+              <span class="visually-hidden">unread messages</span>
+            </span>
+            {{- end -}}
+          </a>
+          <div class="dropdown-menu dropdown-menu-end shadow qz-dropdown-menu" aria-labelledby="messagesDropdown">
+            <div class="dropdown-header d-flex justify-content-between align-items-center">
+              <span>Messages</span>
+              <span class="badge text-bg-primary">{{if gt $messageCount 0}}{{$messageCount}}{{else}}0{{end}}</span>
+            </div>
+            {{- if gt $messageCount 0 -}}
+              {{- range $messages -}}
+              <div class="dropdown-item-text">
+                <div class="d-flex justify-content-between align-items-start">
+                  <span class="fw-semibold">{{.Sender}}</span>
+                  {{- with .Time -}}<small class="text-muted ms-2">{{.}}</small>{{- end -}}
+                </div>
+                {{- with .Preview -}}<div class="small text-muted">{{.}}</div>{{- end -}}
+              </div>
+              {{- end -}}
+            {{- else -}}
+              <div class="dropdown-item-text text-muted small">No new messages.</div>
+            {{- end -}}
+            <div class="dropdown-divider"></div>
+            <button type="button" class="dropdown-item text-center text-primary">Open message center</button>
+          </div>
+        </div>
+        <div class="nav-item dropdown">
+          <a
+            class="nav-link dropdown-toggle d-flex align-items-center gap-2"
+            href="#"
+            id="userMenuDropdown"
+            role="button"
+            data-bs-toggle="dropdown"
+            aria-expanded="false"
+            aria-label="User menu"
+          >
+            <i class="bi bi-person-circle fs-4"></i>
+            <span class="d-none d-lg-inline">
+              {{- with $user -}}
+                {{- with index . "Name" -}}{{.}}{{else}}Administrator{{end -}}
+              {{- else -}}
+                Administrator
+              {{- end -}}
+            </span>
+          </a>
+          <div class="dropdown-menu dropdown-menu-end shadow qz-dropdown-menu" aria-labelledby="userMenuDropdown">
+            <div class="dropdown-header">
+              {{- with $user -}}
+                {{- with index . "Name" -}}{{.}}{{else}}Administrator{{end -}}
+              {{- else -}}
+                Administrator
+              {{- end -}}
+            </div>
+            <div class="dropdown-item-text text-muted">
+              {{- with $user -}}
+                {{- with index . "Role" -}}{{.}}{{else}}Control Center{{end -}}
+              {{- else -}}
+                Control Center
+              {{- end -}}
+            </div>
+            <div class="dropdown-divider"></div>
+            <button type="button" class="dropdown-item">Profile settings</button>
+            <button type="button" class="dropdown-item">Organization preferences</button>
+            <div class="dropdown-divider"></div>
+            <button type="button" class="dropdown-item text-danger">Sign out</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </header>

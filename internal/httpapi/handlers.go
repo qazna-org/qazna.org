@@ -218,18 +218,53 @@ func (a *API) AdminDashboard(w http.ResponseWriter, r *http.Request) {
 		{"Name": "Event stream", "Status": streamStatus, "Detail": streamDetail, "BadgeVariant": streamBadge},
 	}
 
+	headerNotifications := make([]map[string]string, 0, len(alerts))
+	for _, alert := range alerts {
+		headerNotifications = append(headerNotifications, map[string]string{
+			"Title":        alert["Title"],
+			"Description":  alert["Detail"],
+			"Time":         alert["Timestamp"],
+			"BadgeVariant": alert["BadgeVariant"],
+			"BadgeLabel":   alert["Severity"],
+		})
+	}
+	if len(headerNotifications) == 0 {
+		headerNotifications = []map[string]string{
+			{
+				"Title":        "All systems operational",
+				"Description":  "Operational probes report nominal performance.",
+				"Time":         "Updated " + lastUpdated,
+				"BadgeVariant": "success",
+				"BadgeLabel":   "Healthy",
+			},
+		}
+	}
+
+	headerMessages := []map[string]string{
+		{"Sender": "Operations Desk", "Preview": "Liquidity sweep completed without exceptions.", "Time": "5m ago"},
+		{"Sender": "Compliance Office", "Preview": "Quarterly attestation package ready for review.", "Time": "45m ago"},
+	}
+
+	headerUser := map[string]string{
+		"Name": "Qazna Control",
+		"Role": "Administrator",
+	}
+
 	data := map[string]any{
-		"Title":              "Qazna Control Center",
-		"ContentTemplate":    "content-admin-dashboard",
-		"BodyClass":          "dashboard d-flex flex-column min-vh-100",
-		"Layout":             "dashboard",
-		"ActivePage":         "admin",
-		"Version":            a.version,
-		"LastUpdated":        lastUpdated,
-		"SystemMetrics":      metrics,
-		"ProcessStatuses":    processStatuses,
-		"RecentAlerts":       alerts,
-		"RecentTransactions": a.getRecentTransactions(r.Context(), 8),
+		"Title":               "Qazna Control Center",
+		"ContentTemplate":     "content-admin-dashboard",
+		"BodyClass":           "dashboard d-flex flex-column min-vh-100",
+		"Layout":              "dashboard",
+		"ActivePage":          "admin",
+		"Version":             a.version,
+		"LastUpdated":         lastUpdated,
+		"SystemMetrics":       metrics,
+		"ProcessStatuses":     processStatuses,
+		"RecentAlerts":        alerts,
+		"RecentTransactions":  a.getRecentTransactions(r.Context(), 8),
+		"HeaderNotifications": headerNotifications,
+		"HeaderMessages":      headerMessages,
+		"HeaderUser":          headerUser,
 	}
 	a.renderTemplate(w, r, "admin-dashboard", data)
 }
@@ -261,19 +296,49 @@ func (a *API) BankDashboard(w http.ResponseWriter, r *http.Request) {
 		{"Region": "APAC", "Today": "-6.3M QZN", "Trend": "↓ 5%", "TrendVariant": "warning"},
 	}
 
+	headerNotifications := []map[string]string{
+		{
+			"Title":        "Settlement window approaching",
+			"Description":  "Bank of Astana request closes at 14:00 UTC.",
+			"Time":         "13m",
+			"BadgeVariant": "warning",
+			"BadgeLabel":   "Action",
+		},
+		{
+			"Title":        "Liquidity coverage stable",
+			"Description":  "EUR TARGET2 pool remains above 105% coverage.",
+			"Time":         "1h",
+			"BadgeVariant": "success",
+			"BadgeLabel":   "Stable",
+		},
+	}
+
+	headerMessages := []map[string]string{
+		{"Sender": "Settlement Desk", "Preview": "Confirm T+0 instructions with National Bank of Kazakhstan.", "Time": "12m ago"},
+		{"Sender": "Compliance Team", "Preview": "Updated AML checklist ready for acknowledgement.", "Time": "1h ago"},
+	}
+
+	headerUser := map[string]string{
+		"Name": "Sovereign Reserve Bank",
+		"Role": "Operator",
+	}
+
 	data := map[string]any{
-		"Title":              "Central Bank Dashboard",
-		"ContentTemplate":    "content-bank-dashboard",
-		"BodyClass":          "dashboard d-flex flex-column min-vh-100",
-		"Layout":             "dashboard",
-		"ActivePage":         "banks",
-		"InstitutionName":    "Sovereign Reserve Bank",
-		"LastUpdated":        lastUpdated,
-		"BankMetrics":        bankMetrics,
-		"LiquidityOverview":  liquidity,
-		"SettlementQueue":    queue,
-		"RegionalBreakdown":  regions,
-		"RecentTransactions": a.getRecentTransactions(r.Context(), 5),
+		"Title":               "Central Bank Dashboard",
+		"ContentTemplate":     "content-bank-dashboard",
+		"BodyClass":           "dashboard d-flex flex-column min-vh-100",
+		"Layout":              "dashboard",
+		"ActivePage":          "banks",
+		"InstitutionName":     "Sovereign Reserve Bank",
+		"LastUpdated":         lastUpdated,
+		"BankMetrics":         bankMetrics,
+		"LiquidityOverview":   liquidity,
+		"SettlementQueue":     queue,
+		"RegionalBreakdown":   regions,
+		"RecentTransactions":  a.getRecentTransactions(r.Context(), 5),
+		"HeaderNotifications": headerNotifications,
+		"HeaderMessages":      headerMessages,
+		"HeaderUser":          headerUser,
 	}
 	a.renderTemplate(w, r, "bank-dashboard", data)
 }

@@ -56,7 +56,7 @@ body.map-page .qz-header .navbar {
 
 .qz-header-dashboard {
   width: 100%;
-  box-shadow: 0 0.5rem 1.5rem rgba(13, 110, 253, 0.35);
+  box-shadow: 0 0.5rem 1rem rgba(0, 47, 105, 0.35);
   position: sticky;
   top: 0;
   z-index: 1020;
@@ -88,6 +88,51 @@ body.map-page .qz-header .navbar {
   color: rgba(255, 255, 255, 0.85);
 }
 
+.qz-dashboard-nav .nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.qz-dashboard-nav .nav-link .badge {
+  font-size: 0.65rem;
+}
+
+.qz-dashboard-nav .nav-link .fs-4,
+.qz-dashboard-nav .nav-link .fs-5 {
+  line-height: 1;
+}
+
+.qz-dropdown-menu {
+  min-width: 18rem;
+  padding: 0.75rem 0;
+}
+
+.qz-dropdown-menu .dropdown-header {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.5rem 1rem;
+}
+
+.qz-dropdown-menu .dropdown-item-text {
+  white-space: normal;
+  padding: 0.5rem 1rem;
+}
+
+.qz-dropdown-menu .dropdown-item-text + .dropdown-item-text {
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.qz-dropdown-menu .dropdown-divider {
+  margin: 0.5rem 0;
+}
+
+.qz-dropdown-menu .dropdown-item {
+  padding: 0.5rem 1rem;
+}
+
 .qz-logo {
   width: 32px;
   height: 32px;
@@ -109,7 +154,7 @@ body.map-page .qz-hero .container {
   backdrop-filter: blur(10px);
   padding: 2rem 2rem;
   border-radius: 2rem;
-  box-shadow: 0 10px 20px rgba(0, 60, 75, 0.25);
+  box-shadow: 0 10px 20px rgba(0, 37, 75, 0.25);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -150,6 +195,10 @@ body.dashboard-layout {
   background-color: #f8f9fa;
   color: #212529;
   min-height: 100vh;
+}
+
+.card {
+    border-radius: 0.75rem;
 }
 
 .dashboard-wrapper {
@@ -197,14 +246,14 @@ body.dashboard-layout {
 
 .dashboard-main main {
   flex: 1 1 auto;
-  padding-top: 2rem;
-  padding-bottom: 4rem;
+  padding-top: 1.5rem;
+  padding-bottom: 1.5rem;
 }
 
 body.dashboard-layout .stat-card {
   border-left: 4px solid var(--bs-primary);
   border-radius: 0.75rem;
-  box-shadow: 0 0.5rem 1rem rgba(33, 37, 41, 0.05);
+  box-shadow: 0 0.5rem 1rem rgba(33, 37, 41, 0.15);
 }
 
 body.dashboard-layout .timeline-dot {
