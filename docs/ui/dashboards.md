@@ -20,16 +20,9 @@ Both dashboards share the global navigation shell and style guide defined in
    ```bash
    docker compose down -v
    ```
-2. Generate a local RSA key pair once (keys are written to `dev_keys/`):
+2. Export an HMAC secret for the current shell and start the stack:
    ```bash
-   mkdir -p dev_keys
-   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out dev_keys/private.pem
-   openssl rsa -pubout -in dev_keys/private.pem -out dev_keys/public.pem
-   ```
-3. Export the keys for the current shell and start the stack:
-   ```bash
-   export QAZNA_AUTH_PRIVATE_KEY="$(cat dev_keys/private.pem)"
-   export QAZNA_AUTH_PUBLIC_KEY="$(cat dev_keys/public.pem)"
+   export QAZNA_AUTH_SECRET="$(openssl rand -hex 32)"
    docker compose up -d --build
    ```
 4. Sanity-check the API:
@@ -40,7 +33,7 @@ Both dashboards share the global navigation shell and style guide defined in
    ```
 5. Visit the dashboards using the URLs above.
 
-> NOTE: `QAZNA_AUTH_*` exports are **not** persisted; run the export commands
+> NOTE: `QAZNA_AUTH_SECRET` is **not** persisted; run the export command
 > again in any new shell before `docker compose up`.
 
 ## Structure recap

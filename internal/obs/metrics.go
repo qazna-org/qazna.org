@@ -51,7 +51,7 @@ func Handler() http.Handler {
 
 func Instrument(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := canonicalPath(r.URL.Path)
+		path := CanonicalPath(r.URL.Path)
 		method := r.Method
 
 		httpInFlight.Inc()
@@ -69,7 +69,7 @@ func Instrument(next http.Handler) http.Handler {
 	})
 }
 
-func canonicalPath(path string) string {
+func CanonicalPath(path string) string {
 	if path == "" {
 		return "/"
 	}

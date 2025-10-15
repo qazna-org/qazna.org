@@ -2,6 +2,7 @@ package remote
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	v1 "qazna.org/api/gen/go/api/proto/qazna/v1"
@@ -117,16 +118,11 @@ func outgoingWithIdentity(ctx context.Context) context.Context {
 		return ctx
 	}
 	var pairs []string
-	if token, ok := auth.TokenFromContext(ctx); ok {
-		pairs = append(pairs, "authorization", "Bearer "+token)
+	if userID, ok := auth.UserIDFromContext(ctx); ok {
+		pairs = append(pairs, "x-qazna-user-id", userID)
 	}
-	if principal, ok := auth.PrincipalFromContext(ctx); ok {
-		if principal.User != nil {
-			pairs = append(pairs, "x-qazna-user-id", principal.User.ID)
-			if principal.User.OrganizationID != "" {
-				pairs = append(pairs, "x-qazna-org-id", principal.User.OrganizationID)
-			}
-		}
+	if roles := auth.RolesFromContext(ctx); len(roles) > 0 {
+		pairs = append(pairs, "x-qazna-roles", strings.Join(roles, ","))
 	}
 	if len(pairs) == 0 {
 		return ctx

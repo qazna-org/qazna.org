@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"qazna.org/api/spec"
-	"qazna.org/internal/auth"
+	"qazna.org/internal/audit"
 	"qazna.org/internal/ledger"
 	"qazna.org/internal/obs"
 	"qazna.org/internal/stream"
@@ -40,26 +42,27 @@ type API struct {
 	version     string
 	ledger      ledger.Service
 	stream      *stream.Stream
-	auth        *auth.Service
 	templates   *template.Template
 	bodyMaxSize int64
 	rateBurst   int
 	ratePerSec  int
 }
 
-func New(r readinessChecker, version string, ledgerService ledger.Service, s *stream.Stream, tmpl *template.Template, authSvc *auth.Service) *API {
+func New(r readinessChecker, version string, ledgerService ledger.Service, s *stream.Stream, tmpl *template.Template) *API {
 	a := &API{
 		mux:         http.NewServeMux(),
 		readiness:   r,
 		version:     version,
 		ledger:      ledgerService,
 		stream:      s,
-		auth:        authSvc,
 		templates:   tmpl,
 		bodyMaxSize: 1 << 20, // 1 MiB per request body
-		rateBurst:   20,
-		ratePerSec:  10,
+		rateBurst:   40,
+		ratePerSec:  20,
 	}
+
+	a.rateBurst = envInt("QAZNA_RATE_LIMIT_BURST", a.rateBurst)
+	a.ratePerSec = envInt("QAZNA_RATE_LIMIT_RPS", a.ratePerSec)
 
 	// health/ready/info
 	a.mux.HandleFunc("/healthz", a.Healthz)
@@ -77,9 +80,9 @@ func New(r readinessChecker, version string, ledgerService ledger.Service, s *st
 	a.mux.HandleFunc("/v1/stream", a.Stream)
 
 	// Ledger endpoints
-	a.mux.HandleFunc("/v1/accounts", a.handleAccountsCollection)
+	a.mux.Handle("/v1/accounts", RequireRole("admin")(http.HandlerFunc(a.handleAccountsCollection)))
 	a.mux.HandleFunc("/v1/accounts/", a.handleAccountResource)
-	a.mux.HandleFunc("/v1/transfers", a.handleTransfers)
+	a.mux.Handle("/v1/transfers", RequireRole("admin")(http.HandlerFunc(a.handleTransfers)))
 	a.mux.HandleFunc("/v1/ledger/transactions", a.handleTransactions)
 
 	// Prometheus metrics
@@ -407,27 +410,38 @@ func (a *API) resolveLocation(id string) stream.Location {
 	return loc
 }
 
+func envInt(name string, def int) int {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return def
+	}
+	val, err := strconv.Atoi(raw)
+	if err != nil || val <= 0 {
+		return def
+	}
+	return val
+}
+
 func (a *API) audit(ctx context.Context, action, resourceType, resourceID string, metadata map[string]string) {
-	if a == nil || a.auth == nil {
-		return
+	fields := map[string]any{}
+	if resourceType != "" {
+		fields["resource_type"] = resourceType
 	}
-	principal, ok := auth.PrincipalFromContext(ctx)
-	if !ok || principal.User == nil {
-		return
+	if resourceID != "" {
+		fields["resource_id"] = resourceID
 	}
-	if metadata == nil {
-		metadata = map[string]string{}
+	if len(metadata) > 0 {
+		for k, v := range metadata {
+			fields[k] = v
+		}
 	}
-	entry := &auth.AuditEntry{
-		ActorUserID:  principal.User.ID,
-		ActorOrgID:   principal.User.OrganizationID,
-		Action:       action,
-		ResourceType: resourceType,
-		ResourceID:   resourceID,
-		Metadata:     metadata,
-		TraceID:      RequestIDFromContext(ctx),
-	}
-	if err := a.auth.AppendAudit(ctx, entry); err != nil {
-		log.Printf("audit append failed: %v", err)
+	if err := audit.LogEvent(ctx, action, fields); err != nil {
+		obs.LogRequest(map[string]any{
+			"ts":    time.Now().UTC().Format(time.RFC3339Nano),
+			"level": "error",
+			"msg":   "audit_log_failed",
+			"event": action,
+			"error": err.Error(),
+		})
 	}
 }

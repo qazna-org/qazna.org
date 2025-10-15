@@ -24,6 +24,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        VERSION: ${QAZNA_VERSION:-dev}
+        COMMIT: ${QAZNA_COMMIT:-local}
     environment:
       QAZNA_PG_DSN: postgres://postgres:${QAZNA_POSTGRES_PASSWORD:?set QAZNA_POSTGRES_PASSWORD}@pg:5432/qz?sslmode=disable
       QAZNA_HTTP_ADDR: ":8080"
@@ -31,12 +34,7 @@ services:
       QAZNA_LOG_LEVEL: "info"
       QAZNA_LOG_FORMAT: "json"
       QAZNA_ALLOWED_ORIGINS: ${QAZNA_ALLOWED_ORIGINS:-}
-      QAZNA_AUTH_PRIVATE_KEY: ${QAZNA_AUTH_PRIVATE_KEY:?set QAZNA_AUTH_PRIVATE_KEY}
-      QAZNA_AUTH_PUBLIC_KEY: ${QAZNA_AUTH_PUBLIC_KEY:?set QAZNA_AUTH_PUBLIC_KEY}
-      QAZNA_AUTH_KEY_ID: ${QAZNA_AUTH_KEY_ID:-}
-      QAZNA_AUTH_ISSUER: ${QAZNA_AUTH_ISSUER:-}
-      QAZNA_AUTH_ACCESS_TTL: ${QAZNA_AUTH_ACCESS_TTL:-}
-      QAZNA_AUTH_REFRESH_TTL: ${QAZNA_AUTH_REFRESH_TTL:-}
+      QAZNA_AUTH_SECRET: ${QAZNA_AUTH_SECRET:?set QAZNA_AUTH_SECRET}
     depends_on:
       pg:
         condition: service_healthy

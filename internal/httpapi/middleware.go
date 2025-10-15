@@ -2,10 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
-	"encoding/json"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -13,7 +9,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/time/rate"
+	"qazna.org/internal/audit"
+	"qazna.org/internal/obs"
 )
 
 type statusWriter struct {
@@ -45,19 +44,18 @@ type ctxKey int
 const requestIDKey ctxKey = iota
 
 func genID() string {
-	var b [12]byte
-	_, _ = rand.Read(b[:])
-	return hex.EncodeToString(b[:])
+	return uuid.NewString()
 }
 
 func RequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rid := r.Header.Get("X-Request-Id")
+		rid := strings.TrimSpace(r.Header.Get("X-Request-Id"))
 		if rid == "" {
 			rid = genID()
 		}
 		w.Header().Set("X-Request-Id", rid)
 		ctx := context.WithValue(r.Context(), requestIDKey, rid)
+		ctx = audit.WithRequestID(ctx, rid)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -75,20 +73,6 @@ func RequestIDFromContext(ctx context.Context) string {
    JSON logging
    ========================= */
 
-type logRecord struct {
-	Time       string  `json:"time"`
-	Level      string  `json:"level"`
-	RequestID  string  `json:"request_id,omitempty"`
-	Method     string  `json:"method"`
-	Path       string  `json:"path"`
-	RemoteIP   string  `json:"remote_ip"`
-	Status     int     `json:"status"`
-	DurationMs float64 `json:"duration_ms"`
-	Bytes      int     `json:"bytes"`
-	UserAgent  string  `json:"user_agent,omitempty"`
-	Referer    string  `json:"referer,omitempty"`
-}
-
 func LoggingJSON(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sw := &statusWriter{ResponseWriter: w, code: http.StatusOK}
@@ -96,21 +80,27 @@ func LoggingJSON(next http.Handler) http.Handler {
 		next.ServeHTTP(sw, r)
 		d := time.Since(start)
 
-		rec := logRecord{
-			Time:       time.Now().UTC().Format(time.RFC3339Nano),
-			Level:      "info",
-			RequestID:  RequestIDFromContext(r.Context()),
-			Method:     r.Method,
-			Path:       r.URL.Path,
-			RemoteIP:   clientIP(r),
-			Status:     sw.code,
-			DurationMs: float64(d.Microseconds()) / 1000.0,
-			Bytes:      sw.n,
-			UserAgent:  r.UserAgent(),
-			Referer:    r.Referer(),
+		rec := map[string]any{
+			"ts":          time.Now().UTC().Format(time.RFC3339Nano),
+			"level":       "info",
+			"msg":         "request_complete",
+			"request_id":  RequestIDFromContext(r.Context()),
+			"method":      r.Method,
+			"path":        obs.CanonicalPath(r.URL.Path),
+			"status":      sw.code,
+			"duration_ms": float64(d.Microseconds()) / 1000.0,
+			"bytes":       sw.n,
 		}
-		b, _ := json.Marshal(rec)
-		log.Println(string(b))
+		if ip := clientIP(r); ip != "" {
+			rec["remote_ip"] = ip
+		}
+		if ua := r.UserAgent(); ua != "" {
+			rec["user_agent"] = ua
+		}
+		if ref := r.Referer(); ref != "" {
+			rec["referer"] = ref
+		}
+		obs.LogRequest(rec)
 	})
 }
 
@@ -122,7 +112,13 @@ func Recover(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func(start time.Time) {
 			if rec := recover(); rec != nil {
-				log.Println(`{"level":"error","msg":"panic recovered","request_id":"` + RequestIDFromContext(r.Context()) + `"}`)
+				obs.LogRequest(map[string]any{
+					"ts":         time.Now().UTC().Format(time.RFC3339Nano),
+					"level":      "error",
+					"msg":        "panic_recovered",
+					"request_id": RequestIDFromContext(r.Context()),
+					"error":      rec,
+				})
 				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			}
 		}(time.Now())
@@ -236,8 +232,8 @@ func RateLimit(next http.Handler, burst int, perSecond int) http.Handler {
 		mu.Unlock()
 
 		if !lim.Allow() {
-			w.WriteHeader(http.StatusTooManyRequests)
-			_, _ = w.Write([]byte("rate limit exceeded"))
+			w.Header().Set("Retry-After", "1")
+			writeError(w, r, http.StatusTooManyRequests, "rate limit exceeded")
 			return
 		}
 

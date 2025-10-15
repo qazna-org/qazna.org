@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -24,60 +23,65 @@ var publicPaths = []string{
 	"/admin/dashboard",
 	"/banks/dashboard",
 }
+
 var publicPrefixes = []string{
 	"/assets/",
 }
 
 func (a *API) withAuth(next http.Handler) http.Handler {
-	if a == nil || a.auth == nil || !a.auth.SupportsTokens() {
-		return next
-	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodOptions {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		if isPublicPath(r.URL.Path) {
+		if r.Method == http.MethodOptions || isPublicPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
 
 		token, err := extractBearerToken(r.Header.Get(authHeader))
 		if err != nil {
-			respondError(w, http.StatusUnauthorized, err.Error())
+			setWWWAuthenticate(w, "invalid_request", err.Error())
+			writeError(w, r, http.StatusUnauthorized, err.Error())
 			return
 		}
 
-		principal, err := a.auth.AuthenticateToken(r.Context(), token)
+		claims, err := auth.ParseAndValidate(token)
 		if err != nil {
-			switch {
-			case errors.Is(err, auth.ErrInvalidToken):
-				respondError(w, http.StatusUnauthorized, "invalid token")
-			default:
-				respondError(w, http.StatusInternalServerError, "authentication error")
+			if errors.Is(err, auth.ErrInvalidToken) {
+				setWWWAuthenticate(w, "invalid_token", "token validation failed")
+				writeError(w, r, http.StatusUnauthorized, "invalid token")
+				return
 			}
+			setWWWAuthenticate(w, "server_error", "authentication validation failed")
+			writeError(w, r, http.StatusInternalServerError, "authentication error")
 			return
 		}
 
-		ctx := auth.ContextWithPrincipal(r.Context(), principal)
-		ctx = auth.ContextWithToken(ctx, token)
+		ctx := auth.ContextWithUser(r.Context(), claims.Subject, claims.Roles)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-func (a *API) requirePermission(ctx context.Context, perm string) error {
-	if a == nil || a.auth == nil {
-		return nil
+// RequireRole enforces that the request context contains at least one of the specified roles.
+func RequireRole(roles ...string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if len(roles) == 0 {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if _, ok := auth.UserIDFromContext(r.Context()); !ok {
+				setWWWAuthenticate(w, "invalid_token", "missing authentication context")
+				writeError(w, r, http.StatusUnauthorized, "authentication required")
+				return
+			}
+			for _, role := range roles {
+				if auth.HasRole(r.Context(), role) {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+			setWWWAuthenticate(w, "insufficient_scope", "missing required role")
+			writeError(w, r, http.StatusForbidden, "missing required role")
+		})
 	}
-	principal, ok := auth.PrincipalFromContext(ctx)
-	if !ok {
-		return auth.ErrUnauthorized
-	}
-	if !principal.HasPermission(perm) {
-		return auth.ErrUnauthorized
-	}
-	return nil
 }
 
 func extractBearerToken(header string) (string, error) {
@@ -107,4 +111,19 @@ func isPublicPath(path string) bool {
 		}
 	}
 	return false
+}
+
+func setWWWAuthenticate(w http.ResponseWriter, code, desc string) {
+	params := []string{}
+	if code != "" {
+		params = append(params, `error="`+code+`"`)
+	}
+	if desc != "" {
+		params = append(params, `error_description="`+desc+`"`)
+	}
+	value := "Bearer realm=\"qazna\""
+	if len(params) > 0 {
+		value += ", " + strings.Join(params, ", ")
+	}
+	w.Header().Set("WWW-Authenticate", value)
 }

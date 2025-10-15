@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"qazna.org/internal/auth"
 	"qazna.org/internal/ledger"
 	"qazna.org/internal/stream"
 )
@@ -38,14 +37,14 @@ func (a *API) handleAccountsCollection(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		a.createAccount(w, r)
 	default:
-		methodNotAllowed(w, http.MethodPost)
+		methodNotAllowed(w, r, http.MethodPost)
 	}
 }
 
 func (a *API) handleAccountResource(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/v1/accounts/")
 	if path == "" {
-		respondError(w, http.StatusNotFound, "resource not found")
+		writeError(w, r, http.StatusNotFound, "resource not found")
 		return
 	}
 
@@ -53,7 +52,7 @@ func (a *API) handleAccountResource(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimSuffix(path, "/balance")
 		id = strings.TrimSuffix(id, "/")
 		if id == "" {
-			respondError(w, http.StatusNotFound, "account not found")
+			writeError(w, r, http.StatusNotFound, "account not found")
 			return
 		}
 		a.getBalance(w, r, id)
@@ -61,7 +60,7 @@ func (a *API) handleAccountResource(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if strings.Contains(path, "/") {
-		respondError(w, http.StatusNotFound, "resource not found")
+		writeError(w, r, http.StatusNotFound, "resource not found")
 		return
 	}
 
@@ -69,7 +68,7 @@ func (a *API) handleAccountResource(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		a.getAccount(w, r, path)
 	default:
-		methodNotAllowed(w, http.MethodGet)
+		methodNotAllowed(w, r, http.MethodGet)
 	}
 }
 
@@ -78,7 +77,7 @@ func (a *API) handleTransfers(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		a.transfer(w, r)
 	default:
-		methodNotAllowed(w, http.MethodPost)
+		methodNotAllowed(w, r, http.MethodPost)
 	}
 }
 
@@ -87,28 +86,27 @@ func (a *API) handleTransactions(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		a.listTransactions(w, r)
 	default:
-		methodNotAllowed(w, http.MethodGet)
+		methodNotAllowed(w, r, http.MethodGet)
 	}
 }
 
 func (a *API) createAccount(w http.ResponseWriter, r *http.Request) {
-	if err := a.requirePermission(r.Context(), auth.PermLedgerCreateAccount); err != nil {
-		handleAuthError(w, err)
-		return
-	}
-
 	var req createAccountRequest
 	if err := decodeJSON(w, r, &req); err != nil {
-		respondError(w, http.StatusBadRequest, err.Error())
+		writeError(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if strings.TrimSpace(req.Currency) == "" {
-		respondError(w, http.StatusBadRequest, "currency is required")
+		writeError(w, r, http.StatusBadRequest, "currency is required")
+		return
+	}
+	if len(req.Currency) > 8 {
+		writeError(w, r, http.StatusBadRequest, "currency code too long")
 		return
 	}
 	if req.InitialAmount < 0 {
-		respondError(w, http.StatusBadRequest, "initial_amount must be >= 0")
+		writeError(w, r, http.StatusBadRequest, "initial_amount must be >= 0")
 		return
 	}
 
@@ -117,7 +115,7 @@ func (a *API) createAccount(w http.ResponseWriter, r *http.Request) {
 		Amount:   req.InitialAmount,
 	})
 	if err != nil {
-		handleLedgerError(w, err)
+		handleLedgerError(w, r, err)
 		return
 	}
 
@@ -133,7 +131,7 @@ func (a *API) createAccount(w http.ResponseWriter, r *http.Request) {
 func (a *API) getAccount(w http.ResponseWriter, r *http.Request, id string) {
 	acc, err := a.ledger.GetAccount(r.Context(), id)
 	if err != nil {
-		handleLedgerError(w, err)
+		handleLedgerError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, acc)
@@ -142,26 +140,21 @@ func (a *API) getAccount(w http.ResponseWriter, r *http.Request, id string) {
 func (a *API) getBalance(w http.ResponseWriter, r *http.Request, id string) {
 	currency := r.URL.Query().Get("currency")
 	if strings.TrimSpace(currency) == "" {
-		respondError(w, http.StatusBadRequest, "currency query parameter is required")
+		writeError(w, r, http.StatusBadRequest, "currency query parameter is required")
 		return
 	}
 	mon, err := a.ledger.GetBalance(r.Context(), id, strings.ToUpper(currency))
 	if err != nil {
-		handleLedgerError(w, err)
+		handleLedgerError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, mon)
 }
 
 func (a *API) transfer(w http.ResponseWriter, r *http.Request) {
-	if err := a.requirePermission(r.Context(), auth.PermLedgerTransfer); err != nil {
-		handleAuthError(w, err)
-		return
-	}
-
 	var req transferRequest
 	if err := decodeJSON(w, r, &req); err != nil {
-		respondError(w, http.StatusBadRequest, err.Error())
+		writeError(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -171,37 +164,57 @@ func (a *API) transfer(w http.ResponseWriter, r *http.Request) {
 		if idem == "" {
 			idem = bodyKey
 		} else if idem != bodyKey {
-			respondError(w, http.StatusBadRequest, "Idempotency-Key header and body value must match")
+			writeError(w, r, http.StatusBadRequest, "Idempotency-Key header and body value must match")
 			return
 		}
 	}
-
-	if strings.TrimSpace(req.FromID) == "" || strings.TrimSpace(req.ToID) == "" {
-		respondError(w, http.StatusBadRequest, "from_id and to_id are required")
+	if len(idem) > 128 {
+		writeError(w, r, http.StatusBadRequest, "Idempotency-Key too long")
 		return
 	}
-	if strings.TrimSpace(req.Currency) == "" {
-		respondError(w, http.StatusBadRequest, "currency is required")
+
+	fromID := strings.TrimSpace(req.FromID)
+	toID := strings.TrimSpace(req.ToID)
+	if fromID == "" || toID == "" {
+		writeError(w, r, http.StatusBadRequest, "from_id and to_id are required")
+		return
+	}
+	if len(fromID) > 64 || len(toID) > 64 {
+		writeError(w, r, http.StatusBadRequest, "account identifiers must be <=64 characters")
+		return
+	}
+	currency := strings.ToUpper(strings.TrimSpace(req.Currency))
+	if currency == "" {
+		writeError(w, r, http.StatusBadRequest, "currency is required")
+		return
+	}
+	if len(currency) > 8 {
+		writeError(w, r, http.StatusBadRequest, "currency code too long")
 		return
 	}
 	if req.Amount <= 0 {
-		respondError(w, http.StatusBadRequest, "amount must be > 0")
+		writeError(w, r, http.StatusBadRequest, "amount must be > 0")
 		return
 	}
 
+	start := time.Now().UTC()
 	tx, err := a.ledger.Transfer(
 		r.Context(),
-		strings.TrimSpace(req.FromID),
-		strings.TrimSpace(req.ToID),
+		fromID,
+		toID,
 		ledger.Money{
-			Currency: strings.ToUpper(req.Currency),
+			Currency: currency,
 			Amount:   req.Amount,
 		},
 		idem,
 	)
 	if err != nil {
-		handleLedgerError(w, err)
+		handleLedgerError(w, r, err)
 		return
+	}
+	replayed := false
+	if idem != "" && !tx.CreatedAt.After(start) {
+		replayed = true
 	}
 
 	if idem != "" {
@@ -210,8 +223,8 @@ func (a *API) transfer(w http.ResponseWriter, r *http.Request) {
 
 	if a.stream != nil {
 		event := stream.TransferEvent{
-			From:      a.resolveLocation(req.FromID),
-			To:        a.resolveLocation(req.ToID),
+			From:      a.resolveLocation(fromID),
+			To:        a.resolveLocation(toID),
 			Amount:    tx.Amount,
 			Currency:  tx.Currency,
 			Timestamp: time.Now().UTC(),
@@ -220,15 +233,19 @@ func (a *API) transfer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	meta := map[string]string{
-		"from_account": strings.TrimSpace(req.FromID),
-		"to_account":   strings.TrimSpace(req.ToID),
-		"currency":     strings.ToUpper(req.Currency),
+		"from_account": fromID,
+		"to_account":   toID,
+		"currency":     currency,
 		"amount":       strconv.FormatInt(req.Amount, 10),
 	}
 	if idem != "" {
 		meta["idempotency_key"] = idem
 	}
-	a.audit(r.Context(), "ledger.transfer.execute", "transaction", tx.ID, meta)
+	event := "ledger.transfer.execute"
+	if replayed {
+		event = "ledger.transfer.idempotent_replay"
+	}
+	a.audit(r.Context(), event, "transaction", tx.ID, meta)
 
 	writeJSON(w, http.StatusCreated, tx)
 }
@@ -236,7 +253,7 @@ func (a *API) transfer(w http.ResponseWriter, r *http.Request) {
 func (a *API) listTransactions(w http.ResponseWriter, r *http.Request) {
 	limit, err := parsePositiveInt(r.URL.Query().Get("limit"), 100, 1, 1000)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, err.Error())
+		writeError(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 	afterParam := strings.TrimSpace(r.URL.Query().Get("after"))
@@ -244,7 +261,7 @@ func (a *API) listTransactions(w http.ResponseWriter, r *http.Request) {
 	if afterParam != "" {
 		v, err := strconv.ParseUint(afterParam, 10, 64)
 		if err != nil {
-			respondError(w, http.StatusBadRequest, "after must be a non-negative integer")
+			writeError(w, r, http.StatusBadRequest, "after must be a non-negative integer")
 			return
 		}
 		after = v
@@ -252,7 +269,7 @@ func (a *API) listTransactions(w http.ResponseWriter, r *http.Request) {
 
 	items, next, err := a.ledger.ListTransactions(r.Context(), limit, after)
 	if err != nil {
-		handleLedgerError(w, err)
+		handleLedgerError(w, r, err)
 		return
 	}
 
@@ -262,17 +279,6 @@ func (a *API) listTransactions(w http.ResponseWriter, r *http.Request) {
 		AsOf:      time.Now().UTC(),
 	}
 	writeJSON(w, http.StatusOK, resp)
-}
-
-func handleAuthError(w http.ResponseWriter, err error) {
-	switch {
-	case err == nil:
-		return
-	case errors.Is(err, auth.ErrUnauthorized):
-		respondError(w, http.StatusForbidden, "permission denied")
-	default:
-		respondError(w, http.StatusInternalServerError, "authorization error")
-	}
 }
 
 func parsePositiveInt(raw string, def, min, max int) (int, error) {
@@ -309,26 +315,30 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 	return nil
 }
 
-func handleLedgerError(w http.ResponseWriter, err error) {
+func handleLedgerError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, ledger.ErrInvalidAmount), errors.Is(err, ledger.ErrInvalidCurrency):
-		respondError(w, http.StatusBadRequest, err.Error())
+		writeError(w, r, http.StatusBadRequest, err.Error())
 	case errors.Is(err, ledger.ErrInsufficientFunds):
-		respondError(w, http.StatusConflict, err.Error())
+		writeError(w, r, http.StatusConflict, err.Error())
 	case errors.Is(err, ledger.ErrNotFound):
-		respondError(w, http.StatusNotFound, err.Error())
+		writeError(w, r, http.StatusNotFound, err.Error())
 	default:
-		respondError(w, http.StatusInternalServerError, "internal error")
+		writeError(w, r, http.StatusInternalServerError, "internal error")
 	}
 }
 
-func respondError(w http.ResponseWriter, code int, msg string) {
-	writeJSON(w, code, map[string]any{
+func writeError(w http.ResponseWriter, r *http.Request, code int, msg string) {
+	payload := map[string]any{
 		"error": msg,
-	})
+	}
+	if rid := RequestIDFromContext(r.Context()); rid != "" {
+		payload["request_id"] = rid
+	}
+	writeJSON(w, code, payload)
 }
 
-func methodNotAllowed(w http.ResponseWriter, allowed ...string) {
+func methodNotAllowed(w http.ResponseWriter, r *http.Request, allowed ...string) {
 	w.Header().Set("Allow", strings.Join(allowed, ", "))
-	respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	writeError(w, r, http.StatusMethodNotAllowed, "method not allowed")
 }

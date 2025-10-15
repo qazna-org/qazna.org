@@ -82,3 +82,15 @@ smoke:
 .PHONY: clean
 clean:
 	rm -rf bin/
+
+.PHONY: bench-local
+bench-local:
+	@if command -v hey >/dev/null 2>&1; then \
+		echo "Running hey benchmark"; \
+		hey -n 1000 -c 50 $(API_URL)/healthz | grep -E 'Requests/sec|Requests per second'; \
+	elif command -v ab >/dev/null 2>&1; then \
+		echo "Running ab benchmark"; \
+		ab -n 1000 -c 50 $(API_URL)/healthz | grep 'Requests per second'; \
+	else \
+		echo "Install hey or apache bench (ab) to run bench-local"; exit 1; \
+	fi

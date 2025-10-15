@@ -125,7 +125,7 @@ Security contact: [security@qazna.org](mailto:security@qazna.org)
 
 ## 🧪 Local Development
 
-- `cp .env.example .env` — populate required secrets (`QAZNA_POSTGRES_PASSWORD`, `QAZNA_GRAFANA_ADMIN_PASSWORD`, `QAZNA_AUTH_PRIVATE_KEY`, `QAZNA_AUTH_PUBLIC_KEY`) and optional `QAZNA_ALLOWED_ORIGINS`, `QAZNA_AUTH_KEY_ID`, `QAZNA_AUTH_ISSUER`, and lifetime overrides. Set `QAZNA_LEDGER_GRPC_ADDR` to connect to an external Rust ledger.
+- `cp .env.example .env` — populate required secrets (`QAZNA_POSTGRES_PASSWORD`, `QAZNA_GRAFANA_ADMIN_PASSWORD`, `QAZNA_AUTH_SECRET`) and optional `QAZNA_ALLOWED_ORIGINS` plus rate limit overrides. Set `QAZNA_LEDGER_GRPC_ADDR` to connect to an external Rust ledger.
 - `make proto` — regenerate gRPC/Protobuf stubs (requires [`buf`](https://buf.build)); artifacts are written to `api/gen/go/api/proto/qazna/v1`.
 - `make test` — runs `go vet` and `go test` with the local cache, including REST and gRPC integration tests.
 - Default ports: HTTP `:8080`, gRPC `:9090` inside the container. Docker Compose maps gRPC to `localhost:19090` to avoid clashing with Prometheus on `9090`.
@@ -145,6 +145,10 @@ Security contact: [security@qazna.org](mailto:security@qazna.org)
   ```
 - Exposed gRPC services (`qazna.v1`): `InfoService/GetInfo` and `HealthService/Check`; readiness updates the Prometheus gauge `qazna_ready`.
 - Exposed gRPC services (`qazna.v1`): `InfoService/GetInfo` and `HealthService/Check`; readiness updates the Prometheus gauge `qazna_ready`.
+
+### Local perf sanity
+
+- `make bench-local` – issues 1000 concurrent `/healthz` calls (50 in flight) using `hey` or `ab` and prints the observed requests per second.
 
 ---
 

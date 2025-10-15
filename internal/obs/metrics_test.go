@@ -14,8 +14,8 @@ func TestCanonicalPath(t *testing.T) {
 		"/v1/transfers":                    "/v1/transfers",
 	}
 	for input, expected := range cases {
-		if got := canonicalPath(input); got != expected {
-			t.Fatalf("canonicalPath(%q)=%q, want %q", input, got, expected)
+		if got := CanonicalPath(input); got != expected {
+			t.Fatalf("CanonicalPath(%q)=%q, want %q", input, got, expected)
 		}
 	}
 }

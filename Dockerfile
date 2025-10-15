@@ -3,6 +3,9 @@
 # ───────── Build stage ─────────
 FROM golang:1.24-alpine AS builder
 
+ARG VERSION="dev"
+ARG COMMIT="local"
+
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -10,7 +13,7 @@ RUN go mod download
 COPY . .
 # Статически линкуем, чтобы рантайм был на чистом alpine без CGO
 ENV CGO_ENABLED=0
-RUN go build -o /bin/qazna-api ./cmd/api
+RUN go build -ldflags "-X main.version=${VERSION} -X main.commit=${COMMIT}" -o /bin/qazna-api ./cmd/api
 
 # ───────── Runtime stage ─────────
 FROM alpine:3.20
