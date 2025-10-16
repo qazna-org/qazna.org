@@ -15,6 +15,7 @@ jobs:
           # Передаем секреты из GitHub Secrets в переменные окружения
           QAZNA_AUTH_PRIVATE_KEY: ${{ secrets.QAZNA_AUTH_PRIVATE_KEY }}
           QAZNA_AUTH_PUBLIC_KEY: ${{ secrets.QAZNA_AUTH_PUBLIC_KEY }}
+          QAZNA_AUTH_SECRET: ${{ secrets.QAZNA_AUTH_SECRET || 'test-secret' }}
           # Для тестов можно использовать простые пароли
           QAZNA_POSTGRES_PASSWORD: test-password
           QAZNA_GRAFANA_ADMIN_PASSWORD: test-password
