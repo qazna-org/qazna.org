@@ -1,6 +1,15 @@
 //! Qazna Ledger — deterministic in-memory accounting engine.
 //! This crate provides a thread-safe state machine used by the API layer.
 
+pub mod grpc;
+pub mod proto {
+    pub mod qazna {
+        pub mod v1 {
+            tonic::include_proto!("qazna.v1");
+        }
+    }
+}
+
 use chrono::{DateTime, Utc};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
@@ -182,20 +191,23 @@ impl Ledger {
             }
         }
 
-        let from = state
-            .accounts
-            .get_mut(from_id)
-            .ok_or(LedgerError::NotFound)?;
-        let to = state.accounts.get_mut(to_id).ok_or(LedgerError::NotFound)?;
-
-        let from_balance = from.balances.entry(amount.currency.clone()).or_insert(0);
-        if *from_balance < amount.amount {
-            return Err(LedgerError::InsufficientFunds);
+        {
+            let from = state
+                .accounts
+                .get_mut(from_id)
+                .ok_or(LedgerError::NotFound)?;
+            let balance = from.balances.entry(amount.currency.clone()).or_insert(0);
+            if *balance < amount.amount {
+                return Err(LedgerError::InsufficientFunds);
+            }
+            *balance -= amount.amount;
         }
-        *from_balance -= amount.amount;
 
-        let to_balance = to.balances.entry(amount.currency.clone()).or_insert(0);
-        *to_balance += amount.amount;
+        {
+            let to = state.accounts.get_mut(to_id).ok_or(LedgerError::NotFound)?;
+            let balance = to.balances.entry(amount.currency.clone()).or_insert(0);
+            *balance += amount.amount;
+        }
 
         state.sequence += 1;
         let tx = TransactionRecord {

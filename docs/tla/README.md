@@ -8,4 +8,4 @@ This directory will hold formal specifications for critical Qazna invariants.
 
 ## Getting Started
 1. Install [TLA+](https://lamport.azurewebsites.net/tla/tla.html) or the VSCode extension.
-2. Run `make tla` (to be added) to execute the TLC model checker.
+2. Run `make tla` to execute the TLC model checker from this repository.

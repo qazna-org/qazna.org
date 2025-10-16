@@ -16,12 +16,13 @@ path = "src/bin/ledgerd.rs"
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-ulid = { version = "1.3" }
+ulid = { version = "1.2" }
 prost = "0.12"
 prost-types = "0.12"
 tonic = { version = "0.11", features = ["transport"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
 clap = { version = "4", features = ["derive"] }
 
 [build-dependencies]
 tonic-build = "0.11"
+protoc-bin-vendored = "3.2"

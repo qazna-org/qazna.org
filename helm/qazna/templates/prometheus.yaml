@@ -1,0 +1,62 @@
+{{- if .Values.prometheus.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "qazna.fullname" . }}-prometheus-config
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: {{ .Values.prometheus.scrapeInterval }}
+    scrape_configs:
+      - job_name: 'qazna-api'
+        metrics_path: /metrics
+        static_configs:
+          - targets:
+              - {{ include "qazna.fullname" . }}-api:8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "qazna.fullname" . }}-prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "qazna.fullname" . }}-prometheus
+  template:
+    metadata:
+      labels:
+        app: {{ include "qazna.fullname" . }}-prometheus
+    spec:
+      containers:
+        - name: prometheus
+          image: "{{ .Values.prometheus.image.repository }}:{{ .Values.prometheus.image.tag }}"
+          imagePullPolicy: {{ .Values.prometheus.image.pullPolicy }}
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+          ports:
+            - containerPort: {{ .Values.prometheus.service.port }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+{{- if .Values.prometheus.resources }}
+          resources:
+{{ toYaml .Values.prometheus.resources | indent 12 }}
+{{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "qazna.fullname" . }}-prometheus-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "qazna.fullname" . }}-prometheus
+spec:
+  selector:
+    app: {{ include "qazna.fullname" . }}-prometheus
+  ports:
+    - name: http
+      port: {{ .Values.prometheus.service.port }}
+      targetPort: {{ .Values.prometheus.service.port }}
+{{- end }}

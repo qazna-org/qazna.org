@@ -1,3 +1,4 @@
+{{- $pgHost := printf "%s-postgres" (include "qazna.fullname" .) -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,6 +19,6 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: QAZNA_PG_DSN
-              value: {{ printf "postgres://postgres:$(POSTGRES_PASSWORD)@%s:5432/qz?sslmode=disable" .Values.postgres.host | quote }}
+              value: {{ printf "postgres://%s:%s@%s:%d/%s?sslmode=disable" .Values.postgres.username .Values.postgres.password $pgHost (int .Values.postgres.port) .Values.postgres.database | quote }}
           ports:
             - containerPort: 8080

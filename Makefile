@@ -18,6 +18,7 @@ help:
 	@echo "  make health        - GET /healthz"
 	@echo "  make smoke         - end-to-end API smoke (create accounts, transfer, list)"
 	@echo "  make clean         - local cleanup (no docker volumes)"
+	@echo "  make tla           - run TLC on docs/tla/ledger"
 
 # ─── Go local builds/tests ──────────────────────────────────────────────────────
 .PHONY: build
@@ -61,6 +62,27 @@ down:
 logs:
 	$(COMPOSE) logs -f api
 
+# ─── Database migrations ─────────────────────────────────────────────────────
+.PHONY: migrate-up
+migrate-up:
+	@if [ -z "$(QAZNA_PG_DSN)" ]; then echo "QAZNA_PG_DSN must be set"; exit 1; fi
+	go run ./cmd/migrate -dsn "$(QAZNA_PG_DSN)" up
+
+.PHONY: migrate-down
+migrate-down:
+	@if [ -z "$(QAZNA_PG_DSN)" ]; then echo "QAZNA_PG_DSN must be set"; exit 1; fi
+	go run ./cmd/migrate -dsn "$(QAZNA_PG_DSN)" down
+
+.PHONY: migrate-seed
+migrate-seed:
+	@if [ -z "$(QAZNA_PG_DSN)" ]; then echo "QAZNA_PG_DSN must be set"; exit 1; fi
+	go run ./cmd/migrate -dsn "$(QAZNA_PG_DSN)" seed
+
+.PHONY: migrate-status
+migrate-status:
+	@if [ -z "$(QAZNA_PG_DSN)" ]; then echo "QAZNA_PG_DSN must be set"; exit 1; fi
+	go run ./cmd/migrate -dsn "$(QAZNA_PG_DSN)" status
+
 # ─── Health & smoke ────────────────────────────────────────────────────────────
 .PHONY: health
 health:
@@ -83,6 +105,10 @@ smoke:
 clean:
 	rm -rf bin/
 
+.PHONY: tla
+tla:
+	@scripts/run_tlc.sh docs/tla/ledger
+
 .PHONY: bench-local
 bench-local:
 	@if command -v hey >/dev/null 2>&1; then \
@@ -94,3 +120,34 @@ bench-local:
 	else \
 		echo "Install hey or apache bench (ab) to run bench-local"; exit 1; \
 	fi
+
+.PHONY: grafana-reset
+grafana-reset:
+	@if [ -z "$(QAZNA_GRAFANA_ADMIN_PASSWORD)" ]; then echo "QAZNA_GRAFANA_ADMIN_PASSWORD must be set"; exit 1; fi
+	@scripts/grafana_reset_admin.sh
+
+.PHONY: dev-up
+dev-up:
+	@if [ -z "$(QAZNA_POSTGRES_PASSWORD)" ]; then echo "QAZNA_POSTGRES_PASSWORD must be set"; exit 1; fi
+	@if [ -z "$(QAZNA_GRAFANA_ADMIN_PASSWORD)" ]; then echo "QAZNA_GRAFANA_ADMIN_PASSWORD must be set"; exit 1; fi
+	@if [ -z "$(QAZNA_AUTH_SECRET)" ]; then echo "QAZNA_AUTH_SECRET must be set"; exit 1; fi
+	@set -euo pipefail; \
+	PG_DSN="$${QAZNA_PG_DSN:-postgres://postgres:$(QAZNA_POSTGRES_PASSWORD)@localhost:15432/qz?sslmode=disable}"; \
+	export QAZNA_PG_DSN="$$PG_DSN"; \
+	export QAZNA_AUTH_SECRET="$$QAZNA_AUTH_SECRET"; \
+	export QAZNA_POSTGRES_PASSWORD="$$QAZNA_POSTGRES_PASSWORD"; \
+	export QAZNA_GRAFANA_ADMIN_PASSWORD="$$QAZNA_GRAFANA_ADMIN_PASSWORD"; \
+	$(COMPOSE) up -d pg; \
+	until $(COMPOSE) exec pg pg_isready -U postgres -d qz >/dev/null 2>&1; do sleep 1; done; \
+	echo "Applying migrations..."; \
+	go run ./cmd/migrate -dsn "$$PG_DSN" up; \
+	echo "Seeding demo data..."; \
+	go run ./cmd/migrate -dsn "$$PG_DSN" seed; \
+	echo "Starting compose stack..."; \
+	QAZNA_AUTH_SECRET="$$QAZNA_AUTH_SECRET" QAZNA_POSTGRES_PASSWORD="$$QAZNA_POSTGRES_PASSWORD" QAZNA_GRAFANA_ADMIN_PASSWORD="$$QAZNA_GRAFANA_ADMIN_PASSWORD" QAZNA_PG_DSN="$$PG_DSN" $(COMPOSE) up -d --build; \
+	$(MAKE) grafana-reset >/dev/null; \
+	echo "Local stack is ready. Grafana admin password synced."
+
+.PHONY: demo-load
+demo-load:
+	go run ./cmd/aidemo -duration=$(or $(DURATION),2m) -workers=$(or $(WORKERS),4)

@@ -3,13 +3,13 @@ use std::net::SocketAddr;
 use chrono::Utc;
 use tonic::{transport::Server, Request, Response, Status};
 
-use crate::{Ledger, LedgerError, Money, Transaction};
 use crate::proto::qazna::v1::ledger_service_server::{LedgerService, LedgerServiceServer};
 use crate::proto::qazna::v1::{
     Account as ProtoAccount, Balance as ProtoBalance, CreateAccountRequest, GetAccountRequest,
-    GetBalanceRequest, LedgerServiceServer as _, ListTransactionsRequest, ListTransactionsResponse,
+    GetBalanceRequest, ListTransactionsRequest, ListTransactionsResponse,
     Transaction as ProtoTransaction, TransferRequest, TransferResponse,
 };
+use crate::{Account, Ledger, LedgerError, Money, Transaction};
 use prost_types::Timestamp;
 
 pub async fn serve(addr: SocketAddr, ledger: Ledger) -> Result<(), tonic::transport::Error> {
@@ -31,7 +31,7 @@ impl LedgerService for GRpcLedger {
     ) -> Result<Response<ProtoAccount>, Status> {
         let req = request.into_inner();
         let money = Money::new(req.currency, req.initial_amount);
-        match self.ledger.create_account(Default::default(), money) {
+        match self.ledger.create_account(money) {
             Ok(acc) => Ok(Response::new(to_proto_account(acc))),
             Err(err) => Err(map_error(err)),
         }
@@ -41,7 +41,7 @@ impl LedgerService for GRpcLedger {
         &self,
         request: Request<GetAccountRequest>,
     ) -> Result<Response<ProtoAccount>, Status> {
-        match self.ledger.get_account(Default::default(), &request.into_inner().id) {
+        match self.ledger.get_account(&request.into_inner().id) {
             Ok(acc) => Ok(Response::new(to_proto_account(acc))),
             Err(err) => Err(map_error(err)),
         }
@@ -52,10 +52,7 @@ impl LedgerService for GRpcLedger {
         request: Request<GetBalanceRequest>,
     ) -> Result<Response<ProtoBalance>, Status> {
         let req = request.into_inner();
-        match self
-            .ledger
-            .get_balance(Default::default(), &req.id, &req.currency)
-        {
+        match self.ledger.get_balance(&req.id, &req.currency) {
             Ok(money) => Ok(Response::new(ProtoBalance {
                 currency: money.currency,
                 amount: money.amount,
@@ -68,15 +65,20 @@ impl LedgerService for GRpcLedger {
         &self,
         request: Request<TransferRequest>,
     ) -> Result<Response<TransferResponse>, Status> {
-        let req = request.into_inner();
-        let money = Money::new(req.currency, req.amount);
-        let res = self.ledger.transfer(
-            Default::default(),
-            &req.from_id,
-            &req.to_id,
-            money,
-            req.idempotency_key.as_deref(),
-        );
+        let TransferRequest {
+            from_id,
+            to_id,
+            currency,
+            amount,
+            idempotency_key,
+        } = request.into_inner();
+        let money = Money::new(currency, amount);
+        let idem = if idempotency_key.is_empty() {
+            None
+        } else {
+            Some(idempotency_key.as_str())
+        };
+        let res = self.ledger.transfer(&from_id, &to_id, money, idem);
         match res {
             Ok(tx) => Ok(Response::new(TransferResponse {
                 transaction: Some(to_proto_transaction(tx)),
@@ -92,7 +94,7 @@ impl LedgerService for GRpcLedger {
         let req = request.into_inner();
         match self
             .ledger
-            .list_transactions(Default::default(), req.limit as usize, req.after_sequence)
+            .list_transactions(req.limit as usize, req.after_sequence)
         {
             Ok((txs, next)) => Ok(Response::new(ListTransactionsResponse {
                 items: txs.into_iter().map(to_proto_transaction).collect(),
@@ -112,7 +114,7 @@ fn map_error(err: LedgerError) -> Status {
     }
 }
 
-fn to_proto_account(acc: crate::Account) -> ProtoAccount {
+fn to_proto_account(acc: Account) -> ProtoAccount {
     ProtoAccount {
         id: acc.id,
         created_at: Some(timestamp(acc.created_at)),

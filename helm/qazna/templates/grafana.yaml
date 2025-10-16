@@ -1,0 +1,79 @@
+{{- if .Values.grafana.enabled }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "qazna.fullname" . }}-grafana
+type: Opaque
+stringData:
+  admin-user: {{ .Values.grafana.adminUser | quote }}
+  admin-password: {{ .Values.grafana.adminPassword | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "qazna.fullname" . }}-grafana-datasources
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://{{ include "qazna.fullname" . }}-prometheus:{{ .Values.prometheus.service.port }}
+        isDefault: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "qazna.fullname" . }}-grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "qazna.fullname" . }}-grafana
+  template:
+    metadata:
+      labels:
+        app: {{ include "qazna.fullname" . }}-grafana
+    spec:
+      containers:
+        - name: grafana
+          image: "{{ .Values.grafana.image.repository }}:{{ .Values.grafana.image.tag }}"
+          imagePullPolicy: {{ .Values.grafana.image.pullPolicy }}
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "qazna.fullname" . }}-grafana
+                  key: admin-user
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "qazna.fullname" . }}-grafana
+                  key: admin-password
+          ports:
+            - containerPort: {{ .Values.grafana.service.port }}
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+{{- if .Values.grafana.resources }}
+          resources:
+{{ toYaml .Values.grafana.resources | indent 12 }}
+{{- end }}
+      volumes:
+        - name: datasources
+          configMap:
+            name: {{ include "qazna.fullname" . }}-grafana-datasources
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "qazna.fullname" . }}-grafana
+spec:
+  selector:
+    app: {{ include "qazna.fullname" . }}-grafana
+  ports:
+    - name: http
+      port: {{ .Values.grafana.service.port }}
+      targetPort: {{ .Values.grafana.service.port }}
+{{- end }}

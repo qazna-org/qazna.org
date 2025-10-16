@@ -5,11 +5,38 @@ image:
 
 postgres:
   enabled: true
-  host: pg
-  passwordSecret: qazna-postgres
+  image:
+    repository: postgres
+    tag: "15"
+    pullPolicy: IfNotPresent
+  username: postgres
+  password: qazna-postgres
+  database: qz
+  port: 5432
+  persistence:
+    enabled: false
+    size: 5Gi
+  resources: {}
 
 grafana:
   enabled: true
+  image:
+    repository: grafana/grafana
+    tag: "10.4.6"
+    pullPolicy: IfNotPresent
+  adminUser: admin
+  adminPassword: qazna-admin
+  service:
+    port: 3000
+  resources: {}
 
 prometheus:
   enabled: true
+  image:
+    repository: prom/prometheus
+    tag: "v2.53.0"
+    pullPolicy: IfNotPresent
+  service:
+    port: 9090
+  scrapeInterval: 15s
+  resources: {}

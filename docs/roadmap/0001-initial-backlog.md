@@ -1,19 +1,19 @@
 # Initial Backlog for B2G Trajectory
 
 ## Stream A — Core Ledger & Formal Methods
-- [ ] `core/ledger`: создать каркас state machine (инициализация, apply-entry, snapshot API).
-- [ ] Прототип gRPC-сервиса между Go/API и Rust-ядром.
-- [ ] TLA+: спецификация операций `CreateAccount` и `Transfer`, интеграция в CI.
+- [x] `core/ledger`: создать каркас state machine (инициализация, apply-entry, snapshot API).
+- [x] Прототип gRPC-сервиса между Go/API и Rust-ядром.
+- [x] TLA+: спецификация операций `CreateAccount` и `Transfer`, интеграция в CI.
 
 ## Stream B — Security & Access Control
-- [ ] Проект RBAC: схема БД (users, organizations, roles, permissions).
-- [ ] Проект API авторизации (OAuth 2.0/OIDC, token issuance, audit log).
-- [ ] Draft audit log storage (append-only).
+- [x] Проект RBAC: схема БД (users, organizations, roles, permissions).
+- [x] Проект API авторизации (OAuth 2.0/OIDC, token issuance, audit log).
+- [x] Draft audit log storage (append-only).
 
 ## Stream C — Infrastructure & CI
 - [x] GitHub Actions (lint, tests, buf) — **готово**.
-- [ ] Helm chart scaffolding + values (pg, api, prometheus, grafana).
-- [ ] Secret management ADR (Vault / SOPS).
+- [x] Helm chart scaffolding + values (pg, api, prometheus, grafana).
+- [x] Secret management ADR (Vault / SOPS).
 
 ## Stream D — B2G Pilot & Governance
 - [ ] Whitepaper / презентация для пилотного регулятора (через docs/).
