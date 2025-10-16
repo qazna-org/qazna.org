@@ -1,0 +1,13 @@
+name: setup-atlas
+description: "Install Atlas CLI for migration linting"
+runs:
+  using: "composite"
+  steps:
+    - name: Download Atlas
+      shell: bash
+      run: |
+        curl -sSfL https://atlasgo.sh/latest/linux/amd64?arch=x86_64 | tar -xz atlas
+        sudo mv atlas /usr/local/bin/atlas
+    - name: Verify Atlas
+      shell: bash
+      run: atlas version

@@ -133,6 +133,12 @@ Security contact: [security@qazna.org](mailto:security@qazna.org)
   - `http://localhost:8080/` — real-time global flow map.
   - `http://localhost:8080/admin/dashboard` — operational control center for administrators.
   - `http://localhost:8080/banks/dashboard` — liquidity and settlement console for national/central banks.
+  - `http://localhost:8080/v1/auth/jwks` — JSON Web Key Set with active RS256 public keys.
+- Observability stack:
+  - `http://localhost:9090/` — Prometheus console.
+  - `http://localhost:3000/` — Grafana (login `admin`, password from `QAZNA_GRAFANA_ADMIN_PASSWORD`; run `make grafana-reset` if the stored password drifts).
+- AI demo:
+  - `go run ./cmd/aidemo` (or `make demo-load`) — streams synthetic sovereign transfers; set `OPENAI_API_KEY` to receive executive summaries.
 - Detailed dashboard runbook: [`docs/ui/dashboards.md`](docs/ui/dashboards.md)
 - Quick gRPC check (uses [`grpcurl`](https://github.com/fullstorydev/grpcurl)):
   ```bash
@@ -149,6 +155,14 @@ Security contact: [security@qazna.org](mailto:security@qazna.org)
 ### Local perf sanity
 
 - `make bench-local` – issues 1000 concurrent `/healthz` calls (50 in flight) using `hey` or `ab` and prints the observed requests per second.
+- `make migrate-up` / `make migrate-down` / `make migrate-seed` – manage PostgreSQL schema using the built-in migration runner (requires `QAZNA_PG_DSN`).
+- Default DSN (if unset) points to `postgres://postgres:<pass>@localhost:15432/qz?sslmode=disable` (mapped from the Docker container).
+- `make grafana-reset` – synchronize Grafana admin credentials with `QAZNA_GRAFANA_ADMIN_PASSWORD` inside the running container.
+- `make dev-up` – bootstrap migrations, seeds, Docker Compose services, and Grafana credentials in one step (sourcing secrets from your environment).
+
+CI/CD:
+- `.github/workflows/ci.yml` – golangci-lint, tests, govulncheck, Atlas migration lint, SBOM generation, Trivy scans.
+- `.github/workflows/infra.yml` – Terraform fmt/validate/plan with OPA policy enforcement.
 
 ---
 

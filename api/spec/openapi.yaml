@@ -53,7 +53,7 @@ paths:
       tags: [Auth]
       summary: Issue demo token
       description: |
-        Issues a JSON Web Token (JWT) for demo purposes. Include the desired roles in the request body.
+        Issues a JSON Web Token (JWT) signed with RS256 for demo purposes. Include the desired roles in the request body.
       requestBody:
         required: true
         content:
@@ -69,6 +69,61 @@ paths:
                 $ref: "#/components/schemas/TokenIssueResponse"
         "400":
           description: Invalid request
+
+  /v1/auth/oauth/authorize:
+    post:
+      tags: [Auth]
+      summary: Issue authorization code (PKCE)
+      description: Issues a short-lived authorization code for an OAuth client using PKCE. This endpoint is for demo purposes and accepts user/roles payloads directly.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OAuthAuthorizeRequest"
+      responses:
+        "200":
+          description: Authorization code response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthCodeResponse"
+        "400":
+          description: Invalid request
+
+  /v1/auth/oauth/token:
+    post:
+      tags: [Auth]
+      summary: Exchange authorization code for token
+      description: Exchanges a PKCE authorization code for an RS256 JWT access token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OAuthTokenRequest"
+      responses:
+        "200":
+          description: Token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenIssueResponse"
+        "400":
+          description: Invalid request
+
+  /v1/auth/jwks:
+    get:
+      tags: [Auth]
+      summary: JWKS document
+      description: Returns the JSON Web Key Set containing active and recently rotated RSA public keys.
+      responses:
+        "200":
+          description: JWKS payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JWKS"
 
   /v1/accounts:
     post:
@@ -236,6 +291,53 @@ components:
       properties:
         token: { type: string }
         expires_at: { type: string, format: date-time }
+
+    OAuthAuthorizeRequest:
+      type: object
+      properties:
+        client_id: { type: string }
+        redirect_uri: { type: string, format: uri }
+        code_challenge: { type: string }
+        code_challenge_method:
+          type: string
+          enum: [S256, plain]
+        user: { type: string }
+        roles:
+          type: array
+          items:
+            type: string
+      required: [client_id, redirect_uri, code_challenge, user, roles]
+
+    AuthCodeResponse:
+      type: object
+      properties:
+        code: { type: string }
+        redirect_uri: { type: string, format: uri }
+        expires_at: { type: string, format: date-time }
+
+    OAuthTokenRequest:
+      type: object
+      properties:
+        client_id: { type: string }
+        client_secret: { type: string }
+        code: { type: string }
+        code_verifier: { type: string }
+      required: [client_id, code, code_verifier]
+
+    JWKS:
+      type: object
+      properties:
+        keys:
+          type: array
+          items:
+            type: object
+            properties:
+              kty: { type: string, example: RSA }
+              kid: { type: string }
+              use: { type: string, example: sig }
+              alg: { type: string, example: RS256 }
+              n:   { type: string, description: Base64URL modulus }
+              e:   { type: string, description: Base64URL exponent }
 
     Money:
       type: object

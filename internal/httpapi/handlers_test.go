@@ -2,12 +2,17 @@ package httpapi
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"qazna.org/internal/auth"
 	"qazna.org/internal/ledger"
 	"qazna.org/internal/stream"
@@ -17,25 +22,46 @@ type apiClient struct {
 	baseURL string
 	client  *http.Client
 	t       *testing.T
+	mock    sqlmock.Sqlmock
 }
 
 func newTestAPI(t *testing.T) *apiClient {
 	t.Helper()
 
-	t.Setenv("QAZNA_AUTH_SECRET", "test-secret")
-	auth.ResetSecretForTests()
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
 
-	api := New(ReadyProbe{}, "test", ledger.NewInMemory(), stream.New(), nil)
+	mock.ExpectQuery("select kid, private_pem, public_pem, expires_at.*from auth_keys").WillReturnError(sql.ErrNoRows)
+	mock.ExpectBegin()
+	mock.ExpectExec("update auth_keys set status = 'retired'").WithArgs(sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("insert into auth_keys").WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	authSvc, err := auth.NewService(db, auth.WithIssuer("test"), auth.WithKeyTTL(time.Hour), auth.WithRotateWindow(20*time.Minute))
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	api := New(ReadyProbe{}, "test", ledger.NewInMemory(), stream.New(), nil, authSvc)
 	api.rateBurst = 100
 	api.ratePerSec = 100
 
 	srv := httptest.NewServer(api.Handler())
 	t.Cleanup(srv.Close)
+	t.Cleanup(func() {
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatalf("unmet expectations: %v", err)
+		}
+		_ = db.Close()
+	})
 
 	return &apiClient{
 		baseURL: srv.URL,
 		client:  srv.Client(),
 		t:       t,
+		mock:    mock,
 	}
 }
 
@@ -234,5 +260,59 @@ func TestTokenEndpointValidation(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestOAuthPKCEFlow(t *testing.T) {
+	api := newTestAPI(t)
+
+	verifier := "sample-verifier"
+	sum := sha256.Sum256([]byte(verifier))
+	challenge := base64.RawURLEncoding.EncodeToString(sum[:])
+
+	api.mock.ExpectQuery("select secret, redirect_uri from oauth_clients").WithArgs("demo-client").WillReturnRows(sqlmock.NewRows([]string{"secret", "redirect_uri"}).AddRow("demo-secret", "http://localhost/callback"))
+	api.mock.ExpectExec("insert into oauth_auth_codes").WithArgs(sqlmock.AnyArg(), "demo-client", challenge, "S256", "http://localhost/callback", "demo-user", sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
+
+	resp := api.post("/v1/auth/oauth/authorize", map[string]any{
+		"client_id":             "demo-client",
+		"redirect_uri":          "http://localhost/callback",
+		"code_challenge":        challenge,
+		"code_challenge_method": "S256",
+		"user":                  "demo-user",
+		"roles":                 []string{"admin"},
+	}, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("authorize expected 200, got %d", resp.StatusCode)
+	}
+	var authResp authCodeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&authResp); err != nil {
+		t.Fatalf("decode authorize: %v", err)
+	}
+	_ = resp.Body.Close()
+	if authResp.Code == "" {
+		t.Fatalf("expected authorization code")
+	}
+
+	rolesRaw, _ := json.Marshal([]string{"admin"})
+	expires := time.Now().Add(3 * time.Minute)
+	api.mock.ExpectQuery("select a.code_challenge").WithArgs(authResp.Code, "demo-client").WillReturnRows(sqlmock.NewRows([]string{"code_challenge", "code_challenge_method", "redirect_uri", "user_id", "roles", "expires_at", "consumed_at", "secret"}).AddRow(challenge, "S256", "http://localhost/callback", "demo-user", rolesRaw, expires, nil, "demo-secret"))
+	api.mock.ExpectExec("update oauth_auth_codes set consumed_at").WithArgs(sqlmock.AnyArg(), authResp.Code).WillReturnResult(sqlmock.NewResult(1, 1))
+
+	resp = api.post("/v1/auth/oauth/token", map[string]any{
+		"client_id":     "demo-client",
+		"client_secret": "demo-secret",
+		"code":          authResp.Code,
+		"code_verifier": verifier,
+	}, nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("token expected 200, got %d", resp.StatusCode)
+	}
+	var tok tokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tok); err != nil {
+		t.Fatalf("decode token: %v", err)
+	}
+	if tok.Token == "" {
+		t.Fatalf("expected token in response")
 	}
 }

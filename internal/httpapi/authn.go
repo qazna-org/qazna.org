@@ -15,6 +15,8 @@ const (
 
 var publicPaths = []string{
 	"/v1/auth/token",
+	"/v1/auth/oauth/token",
+	"/v1/auth/oauth/authorize",
 	"/metrics",
 	"/healthz",
 	"/readyz",
@@ -29,6 +31,9 @@ var publicPrefixes = []string{
 }
 
 func (a *API) withAuth(next http.Handler) http.Handler {
+	if a == nil || a.auth == nil {
+		return next
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodOptions || isPublicPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
@@ -42,7 +47,7 @@ func (a *API) withAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		claims, err := auth.ParseAndValidate(token)
+		claims, err := a.auth.ParseAndValidate(r.Context(), token)
 		if err != nil {
 			if errors.Is(err, auth.ErrInvalidToken) {
 				setWWWAuthenticate(w, "invalid_token", "token validation failed")

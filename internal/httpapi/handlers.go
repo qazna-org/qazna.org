@@ -14,6 +14,7 @@ import (
 
 	"qazna.org/api/spec"
 	"qazna.org/internal/audit"
+	"qazna.org/internal/auth"
 	"qazna.org/internal/ledger"
 	"qazna.org/internal/obs"
 	"qazna.org/internal/stream"
@@ -42,23 +43,25 @@ type API struct {
 	version     string
 	ledger      ledger.Service
 	stream      *stream.Stream
+	auth        *auth.Service
 	templates   *template.Template
 	bodyMaxSize int64
 	rateBurst   int
 	ratePerSec  int
 }
 
-func New(r readinessChecker, version string, ledgerService ledger.Service, s *stream.Stream, tmpl *template.Template) *API {
+func New(r readinessChecker, version string, ledgerService ledger.Service, s *stream.Stream, tmpl *template.Template, authSvc *auth.Service) *API {
 	a := &API{
 		mux:         http.NewServeMux(),
 		readiness:   r,
 		version:     version,
 		ledger:      ledgerService,
 		stream:      s,
+		auth:        authSvc,
 		templates:   tmpl,
 		bodyMaxSize: 1 << 20, // 1 MiB per request body
-		rateBurst:   40,
-		ratePerSec:  20,
+		rateBurst:   400,
+		ratePerSec:  200,
 	}
 
 	a.rateBurst = envInt("QAZNA_RATE_LIMIT_BURST", a.rateBurst)
@@ -69,6 +72,9 @@ func New(r readinessChecker, version string, ledgerService ledger.Service, s *st
 	a.mux.HandleFunc("/readyz", a.Ready)
 	a.mux.HandleFunc("/v1/info", a.Info)
 	a.mux.HandleFunc("/v1/auth/token", a.handleAuthToken)
+	a.mux.HandleFunc("/v1/auth/jwks", a.handleJWKS)
+	a.mux.HandleFunc("/v1/auth/oauth/authorize", a.handleOAuthAuthorize)
+	a.mux.HandleFunc("/v1/auth/oauth/token", a.handleOAuthToken)
 
 	// OpenAPI YAML
 	a.mux.HandleFunc("/openapi.yaml", a.OpenAPISpec)
@@ -147,6 +153,24 @@ func (a *API) Info(w http.ResponseWriter, r *http.Request) {
 func (a *API) OpenAPISpec(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
 	_, _ = w.Write(spec.OpenAPI) // content is embedded via //go:embed in qazna.org/api/spec
+}
+
+func (a *API) handleJWKS(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, r, http.MethodGet)
+		return
+	}
+	if a.auth == nil {
+		writeError(w, r, http.StatusNotImplemented, "jwks unavailable")
+		return
+	}
+	jwks, err := a.auth.JWKS(r.Context())
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, "jwks generation failed")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_, _ = w.Write(jwks)
 }
 
 func (a *API) MapPage(w http.ResponseWriter, r *http.Request) {

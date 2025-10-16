@@ -17,6 +17,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	v1 "qazna.org/api/gen/go/api/proto/qazna/v1"
+	"qazna.org/internal/auth"
 	"qazna.org/internal/httpapi"
 	"qazna.org/internal/ledger"
 	"qazna.org/internal/ledger/remote"
@@ -37,16 +38,13 @@ func main() {
 	obs.Init()
 	obs.InitBuildInfo(version, commit)
 
-	if secret := strings.TrimSpace(os.Getenv("QAZNA_AUTH_SECRET")); secret == "" {
-		log.Fatal("QAZNA_AUTH_SECRET is required")
-	}
-
 	// Choose ledger backend: remote gRPC, Postgres (DSN), or in-memory.
 	var (
 		db           *sql.DB
 		ledgerSvc    ledger.Service
 		storeClose   func() error
 		remoteClient *remote.Client
+		authSvc      *auth.Service
 	)
 	if addr := os.Getenv("QAZNA_LEDGER_GRPC_ADDR"); addr != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -67,8 +65,15 @@ func main() {
 		ledgerSvc = store
 		storeClose = store.Close
 
+		svc, err := auth.NewService(db)
+		if err != nil {
+			log.Fatalf("init auth service: %v", err)
+		}
+		authSvc = svc
+
 	} else {
 		ledgerSvc = ledger.NewInMemory()
+		log.Println("running without persistent database; authentication disabled")
 	}
 
 	tmpl := mustParseTemplates()
@@ -78,7 +83,7 @@ func main() {
 	evtStream := stream.New()
 
 	// HTTP API setup.
-	api := httpapi.New(rp, version, ledgerSvc, evtStream, tmpl)
+	api := httpapi.New(rp, version, ledgerSvc, evtStream, tmpl, authSvc)
 
 	srv := &http.Server{
 		Addr:              ":8080",

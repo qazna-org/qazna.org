@@ -20,11 +20,16 @@ Both dashboards share the global navigation shell and style guide defined in
    ```bash
    docker compose down -v
    ```
-2. Export an HMAC secret for the current shell and start the stack:
+2. Apply database migrations and seed demo data (PostgreSQL):
    ```bash
-   export QAZNA_AUTH_SECRET="$(openssl rand -hex 32)"
+   export QAZNA_PG_DSN="postgres://postgres:postgres@localhost:15432/qz?sslmode=disable"
+   make migrate-up
+   make migrate-seed
    docker compose up -d --build
+   make grafana-reset
+   make demo-load WORKERS=6 DURATION=5m
    ```
+   > Tip: run `make dev-up` (optionally followed by `make demo-load`) to execute all steps above using the environment variables.
 4. Sanity-check the API:
    ```bash
    curl -s http://localhost:8080/healthz
@@ -33,8 +38,7 @@ Both dashboards share the global navigation shell and style guide defined in
    ```
 5. Visit the dashboards using the URLs above.
 
-> NOTE: `QAZNA_AUTH_SECRET` is **not** persisted; run the export command
-> again in any new shell before `docker compose up`.
+> NOTE: RSA signing keys rotate automatically and are stored in `auth_keys`. Retrieve public keys from `/v1/auth/jwks` if you integrate external clients.
 
 ## Structure recap
 
