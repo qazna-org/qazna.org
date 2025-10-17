@@ -1,5 +1,7 @@
 # macOS
 .DS_Store
+.env
+*.env
 
 # Go
 bin/
