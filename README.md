@@ -125,10 +125,10 @@ Security contact: [security@qazna.org](mailto:security@qazna.org)
 
 ## 🧪 Local Development
 
-- `cp .env.example .env` — populate required secrets (`QAZNA_POSTGRES_PASSWORD`, `QAZNA_GRAFANA_ADMIN_PASSWORD`, `QAZNA_AUTH_SECRET`) and optional `QAZNA_ALLOWED_ORIGINS` plus rate limit overrides. Set `QAZNA_LEDGER_GRPC_ADDR` to connect to an external Rust ledger.
+- `cp .env.example .env` — populate required secrets (`QAZNA_POSTGRES_PASSWORD`, `QAZNA_GRAFANA_ADMIN_PASSWORD`, `QAZNA_AUTH_SECRET`) and optional `QAZNA_ALLOWED_ORIGINS` plus rate limit overrides. Docker Compose now starts the Rust ledger daemon (`ledgerd`) alongside Postgres and the API; override `QAZNA_LEDGER_GRPC_ADDR` only if you want to point the API at an external ledger cluster.
 - `make proto` — regenerate gRPC/Protobuf stubs (requires [`buf`](https://buf.build)); artifacts are written to `api/gen/go/api/proto/qazna/v1`.
 - `make test` — runs `go vet` and `go test` with the local cache, including REST and gRPC integration tests.
-- Default ports: HTTP `:8080`, gRPC `:9090` inside the container. Docker Compose maps gRPC to `localhost:19090` to avoid clashing with Prometheus on `9090`.
+- Default ports: HTTP `:8080`, gRPC `:9090` inside the container. Docker Compose maps API gRPC to `localhost:19090` and exposes the Rust ledger gRPC service on `localhost:9091`.
 - UI entry points:
   - `http://localhost:8080/` — real-time global flow map.
   - `http://localhost:8080/admin/dashboard` — operational control center for administrators.

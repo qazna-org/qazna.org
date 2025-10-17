@@ -1,6 +1,16 @@
 name: qaznaorg
 
 services:
+  ledgerd:
+    image: qaznaorg-ledgerd:latest
+    build:
+      context: .
+      dockerfile: core/ledger/Dockerfile
+    ports:
+      - "9091:9091"
+    networks:
+      - default
+
   pg:
     image: postgres:16-alpine
     environment:
@@ -29,6 +39,7 @@ services:
         COMMIT: ${QAZNA_COMMIT:-local}
     environment:
       QAZNA_PG_DSN: postgres://postgres:${QAZNA_POSTGRES_PASSWORD:?set QAZNA_POSTGRES_PASSWORD}@pg:5432/qz?sslmode=disable
+      QAZNA_LEDGER_GRPC_ADDR: "ledgerd:9091"
       QAZNA_HTTP_ADDR: ":8080"
       QAZNA_GRPC_ADDR: ":9090"
       QAZNA_LOG_LEVEL: "info"
@@ -36,6 +47,8 @@ services:
       QAZNA_ALLOWED_ORIGINS: ${QAZNA_ALLOWED_ORIGINS:-}
       QAZNA_AUTH_SECRET: ${QAZNA_AUTH_SECRET:?set QAZNA_AUTH_SECRET}
     depends_on:
+      ledgerd:
+        condition: service_started
       pg:
         condition: service_healthy
     ports:

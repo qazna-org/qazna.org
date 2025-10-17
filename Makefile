@@ -146,7 +146,8 @@ dev-up:
 	echo "Starting compose stack..."; \
 	QAZNA_AUTH_SECRET="$$QAZNA_AUTH_SECRET" QAZNA_POSTGRES_PASSWORD="$$QAZNA_POSTGRES_PASSWORD" QAZNA_GRAFANA_ADMIN_PASSWORD="$$QAZNA_GRAFANA_ADMIN_PASSWORD" QAZNA_PG_DSN="$$PG_DSN" $(COMPOSE) up -d --build; \
 	$(MAKE) grafana-reset >/dev/null; \
-	echo "Local stack is ready. Grafana admin password synced."
+	echo "Local stack is ready. Grafana admin password synced."; \
+	echo "Rust ledgerd gRPC listening on localhost:9091."
 
 .PHONY: demo-load
 demo-load:

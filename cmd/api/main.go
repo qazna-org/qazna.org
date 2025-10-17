@@ -46,25 +46,17 @@ func main() {
 		remoteClient *remote.Client
 		authSvc      *auth.Service
 		rbacSvc      *auth.RBACService
+		pgStore      *pg.Store
 	)
-	if addr := os.Getenv("QAZNA_LEDGER_GRPC_ADDR"); addr != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		client, err := remote.Dial(ctx, addr)
-		cancel()
-		if err != nil {
-			log.Fatalf("dial remote ledger: %v", err)
-		}
-		ledgerSvc = remote.NewService(client)
-		remoteClient = client
-		log.Printf("Using remote ledger at %s", addr)
-	} else if dsn := os.Getenv("QAZNA_PG_DSN"); dsn != "" {
+
+	if dsn := os.Getenv("QAZNA_PG_DSN"); dsn != "" {
 		store, errPG := pg.Open(dsn)
 		if errPG != nil {
 			log.Fatalf("open db: %v", errPG)
 		}
 		db = store.DB()
-		ledgerSvc = store
 		storeClose = store.Close
+		pgStore = store
 
 		svc, err := auth.NewService(db)
 		if err != nil {
@@ -77,9 +69,25 @@ func main() {
 			log.Fatalf("init rbac service: %v", err)
 		}
 		rbacSvc = rsvc
+	}
 
+	if addr := os.Getenv("QAZNA_LEDGER_GRPC_ADDR"); addr != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		client, err := remote.Dial(ctx, addr)
+		cancel()
+		if err != nil {
+			log.Fatalf("dial remote ledger: %v", err)
+		}
+		ledgerSvc = remote.NewService(client)
+		remoteClient = client
+		log.Printf("Using remote ledger at %s", addr)
+	} else if pgStore != nil {
+		ledgerSvc = pgStore
 	} else {
 		ledgerSvc = ledger.NewInMemory()
+	}
+
+	if authSvc == nil {
 		log.Println("running without persistent database; authentication disabled")
 	}
 
