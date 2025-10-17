@@ -45,6 +45,7 @@ func main() {
 		storeClose   func() error
 		remoteClient *remote.Client
 		authSvc      *auth.Service
+		rbacSvc      *auth.RBACService
 	)
 	if addr := os.Getenv("QAZNA_LEDGER_GRPC_ADDR"); addr != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -71,6 +72,12 @@ func main() {
 		}
 		authSvc = svc
 
+		rsvc, err := auth.NewRBACService(store)
+		if err != nil {
+			log.Fatalf("init rbac service: %v", err)
+		}
+		rbacSvc = rsvc
+
 	} else {
 		ledgerSvc = ledger.NewInMemory()
 		log.Println("running without persistent database; authentication disabled")
@@ -83,7 +90,7 @@ func main() {
 	evtStream := stream.New()
 
 	// HTTP API setup.
-	api := httpapi.New(rp, version, ledgerSvc, evtStream, tmpl, authSvc)
+	api := httpapi.New(rp, version, ledgerSvc, evtStream, tmpl, authSvc, rbacSvc)
 
 	srv := &http.Server{
 		Addr:              ":8080",

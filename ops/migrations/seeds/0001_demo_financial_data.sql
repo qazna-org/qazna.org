@@ -23,13 +23,21 @@ insert into permissions (id, key, description)
 values
   ('perm-ledger-transfer', 'ledger.transfer', 'Authorize ledger transfers'),
   ('perm-ledger-account', 'ledger.account.create', 'Authorize account creation'),
-  ('perm-observe', 'platform.observe', 'View audit and observability data')
+  ('perm-observe', 'platform.observe', 'View audit and observability data'),
+  ('perm-auth-org', 'auth.manage_organizations', 'Manage organizations'),
+  ('perm-auth-users', 'auth.manage_users', 'Manage organization users'),
+  ('perm-auth-roles', 'auth.manage_roles', 'Manage organization roles'),
+  ('perm-auth-perms', 'auth.manage_permissions', 'Manage role permissions')
 on conflict (id) do nothing;
 
 insert into role_permissions (role_id, permission_id) values
   ('role-sysadmin', 'perm-ledger-transfer'),
   ('role-sysadmin', 'perm-ledger-account'),
   ('role-sysadmin', 'perm-observe'),
+  ('role-sysadmin', 'perm-auth-org'),
+  ('role-sysadmin', 'perm-auth-users'),
+  ('role-sysadmin', 'perm-auth-roles'),
+  ('role-sysadmin', 'perm-auth-perms'),
   ('role-supervisor', 'perm-observe')
 on conflict do nothing;
 

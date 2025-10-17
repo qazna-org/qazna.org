@@ -12,8 +12,10 @@ servers:
 
 tags:
   - name: System
+  - name: Auth
   - name: Accounts
   - name: Ledger
+  - name: RBAC
 
 paths:
   /healthz:
@@ -264,6 +266,156 @@ paths:
                     type: string
                     format: date-time
 
+  /v1/organizations:
+    post:
+      tags: [RBAC]
+      summary: Create organization
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrganizationRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+        "400":
+          description: Invalid request
+        "403":
+          description: Missing permission
+
+  /v1/organizations/{organization_id}/users:
+    post:
+      tags: [RBAC]
+      summary: Create user within organization
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: organization_id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Invalid request
+        "403":
+          description: Missing permission
+        "404":
+          description: Organization not found
+        "409":
+          description: Email already exists
+
+  /v1/organizations/{organization_id}/roles:
+    post:
+      tags: [RBAC]
+      summary: Create role within organization
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: organization_id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRoleRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+        "400":
+          description: Invalid request
+        "403":
+          description: Missing permission
+        "404":
+          description: Organization not found
+        "409":
+          description: Role already exists
+
+  /v1/roles/{role_id}/permissions:
+    put:
+      tags: [RBAC]
+      summary: Replace role permissions
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: role_id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRolePermissionsRequest"
+      responses:
+        "204":
+          description: Updated
+        "400":
+          description: Invalid request
+        "403":
+          description: Missing permission
+        "404":
+          description: Role or permission not found
+
+  /v1/users/{user_id}/assignments:
+    post:
+      tags: [RBAC]
+      summary: Assign role to user
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: user_id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignRoleRequest"
+      responses:
+        "201":
+          description: Assignment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserRoleAssignment"
+        "400":
+          description: Invalid request
+        "403":
+          description: Missing permission
+        "404":
+          description: User or role not found
+        "409":
+          description: Assignment already exists
+
 components:
   securitySchemes:
     bearerAuth:
@@ -387,3 +539,88 @@ components:
         amount:          { type: integer, example: 25000 }
         idempotency_key: { type: string, nullable: true }
       required: [from_id, to_id, currency, amount]
+
+    CreateOrganizationRequest:
+      type: object
+      properties:
+        name: { type: string, example: "Central Clearing House" }
+        metadata:
+          type: object
+          additionalProperties: {}
+      required: [name]
+
+    Organization:
+      type: object
+      properties:
+        id:         { type: string, example: org-123 }
+        name:       { type: string }
+        metadata:
+          type: object
+          additionalProperties: {}
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+      required: [id, name, created_at, updated_at]
+
+    CreateUserRequest:
+      type: object
+      properties:
+        email:    { type: string, format: email }
+        password: { type: string, format: password }
+        status:
+          type: string
+          enum: [active, disabled]
+      required: [email, password]
+
+    User:
+      type: object
+      properties:
+        id:              { type: string }
+        organization_id: { type: string }
+        email:           { type: string, format: email }
+        status:
+          type: string
+          enum: [active, disabled]
+        created_at:      { type: string, format: date-time }
+        updated_at:      { type: string, format: date-time }
+      required: [id, organization_id, email, status, created_at, updated_at]
+
+    CreateRoleRequest:
+      type: object
+      properties:
+        name:        { type: string, example: treasury_operator }
+        description: { type: string }
+      required: [name]
+
+    Role:
+      type: object
+      properties:
+        id:              { type: string }
+        organization_id: { type: string }
+        name:            { type: string }
+        description:     { type: string, nullable: true }
+        created_at:      { type: string, format: date-time }
+        updated_at:      { type: string, format: date-time }
+      required: [id, organization_id, name, created_at, updated_at]
+
+    UpdateRolePermissionsRequest:
+      type: object
+      properties:
+        permissions:
+          type: array
+          items: { type: string }
+      required: [permissions]
+
+    AssignRoleRequest:
+      type: object
+      properties:
+        role_id: { type: string }
+      required: [role_id]
+
+    UserRoleAssignment:
+      type: object
+      properties:
+        user_id:         { type: string }
+        role_id:         { type: string }
+        organization_id: { type: string }
+        created_at:      { type: string, format: date-time }
+      required: [user_id, role_id, organization_id, created_at]

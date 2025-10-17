@@ -25,7 +25,7 @@ type apiClient struct {
 	mock    sqlmock.Sqlmock
 }
 
-func newTestAPI(t *testing.T) *apiClient {
+func newTestAPI(t *testing.T, store auth.RBACStore) *apiClient {
 	t.Helper()
 
 	db, mock, err := sqlmock.New()
@@ -44,7 +44,16 @@ func newTestAPI(t *testing.T) *apiClient {
 		t.Fatalf("NewService: %v", err)
 	}
 
-	api := New(ReadyProbe{}, "test", ledger.NewInMemory(), stream.New(), nil, authSvc)
+	var rbacSvc *auth.RBACService
+	if store != nil {
+		var svcErr error
+		rbacSvc, svcErr = auth.NewRBACService(store)
+		if svcErr != nil {
+			t.Fatalf("NewRBACService: %v", svcErr)
+		}
+	}
+
+	api := New(ReadyProbe{}, "test", ledger.NewInMemory(), stream.New(), nil, authSvc, rbacSvc)
 	api.rateBurst = 100
 	api.ratePerSec = 100
 
@@ -144,7 +153,7 @@ func decode[T any](t *testing.T, r *http.Response) T {
 }
 
 func TestAPIAccountsTransferFlow(t *testing.T) {
-	api := newTestAPI(t)
+	api := newTestAPI(t, nil)
 	token := api.obtainToken("demo", []string{"admin"})
 	authHeader := map[string]string{"Authorization": "Bearer " + token}
 
@@ -234,7 +243,7 @@ func TestAPIAccountsTransferFlow(t *testing.T) {
 }
 
 func TestAPIEnforcesAuth(t *testing.T) {
-	api := newTestAPI(t)
+	api := newTestAPI(t, nil)
 
 	resp := api.post("/v1/accounts", map[string]any{
 		"currency":       "QZN",
@@ -254,7 +263,7 @@ func TestAPIEnforcesAuth(t *testing.T) {
 }
 
 func TestTokenEndpointValidation(t *testing.T) {
-	api := newTestAPI(t)
+	api := newTestAPI(t, nil)
 
 	resp := api.post("/v1/auth/token", map[string]any{"user": ""}, nil)
 	defer resp.Body.Close()
@@ -264,7 +273,7 @@ func TestTokenEndpointValidation(t *testing.T) {
 }
 
 func TestOAuthPKCEFlow(t *testing.T) {
-	api := newTestAPI(t)
+	api := newTestAPI(t, nil)
 
 	verifier := "sample-verifier"
 	sum := sha256.Sum256([]byte(verifier))

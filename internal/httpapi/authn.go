@@ -89,6 +89,71 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 	}
 }
 
+func (a *API) requirePermission(perms ...string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !a.ensurePermissions(w, r, perms...) {
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func (a *API) ensurePermissions(w http.ResponseWriter, r *http.Request, perms ...string) bool {
+	if len(perms) == 0 {
+		return true
+	}
+	if a == nil || a.rbac == nil {
+		writeError(w, r, http.StatusServiceUnavailable, "rbac service unavailable")
+		return false
+	}
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		setWWWAuthenticate(w, "invalid_token", "missing authentication context")
+		writeError(w, r, http.StatusUnauthorized, "authentication required")
+		return false
+	}
+	granted, err := a.rbac.UserPermissions(r.Context(), userID)
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, "permission lookup failed")
+		return false
+	}
+	if !hasAllPermissions(granted, perms) {
+		setWWWAuthenticate(w, "insufficient_scope", "missing required permission")
+		writeError(w, r, http.StatusForbidden, "missing required permission")
+		return false
+	}
+	return true
+}
+
+func hasAllPermissions(granted []string, required []string) bool {
+	if len(required) == 0 {
+		return true
+	}
+	if len(granted) == 0 {
+		return false
+	}
+	seen := make(map[string]struct{}, len(granted))
+	for _, p := range granted {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		seen[p] = struct{}{}
+	}
+	for _, req := range required {
+		req = strings.TrimSpace(req)
+		if req == "" {
+			continue
+		}
+		if _, ok := seen[req]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func extractBearerToken(header string) (string, error) {
 	header = strings.TrimSpace(header)
 	if header == "" {

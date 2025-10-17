@@ -44,13 +44,22 @@ type API struct {
 	ledger      ledger.Service
 	stream      *stream.Stream
 	auth        *auth.Service
+	rbac        *auth.RBACService
 	templates   *template.Template
 	bodyMaxSize int64
 	rateBurst   int
 	ratePerSec  int
 }
 
-func New(r readinessChecker, version string, ledgerService ledger.Service, s *stream.Stream, tmpl *template.Template, authSvc *auth.Service) *API {
+func New(
+	r readinessChecker,
+	version string,
+	ledgerService ledger.Service,
+	s *stream.Stream,
+	tmpl *template.Template,
+	authSvc *auth.Service,
+	rbacSvc *auth.RBACService,
+) *API {
 	a := &API{
 		mux:         http.NewServeMux(),
 		readiness:   r,
@@ -58,6 +67,7 @@ func New(r readinessChecker, version string, ledgerService ledger.Service, s *st
 		ledger:      ledgerService,
 		stream:      s,
 		auth:        authSvc,
+		rbac:        rbacSvc,
 		templates:   tmpl,
 		bodyMaxSize: 1 << 20, // 1 MiB per request body
 		rateBurst:   400,
@@ -90,6 +100,12 @@ func New(r readinessChecker, version string, ledgerService ledger.Service, s *st
 	a.mux.HandleFunc("/v1/accounts/", a.handleAccountResource)
 	a.mux.Handle("/v1/transfers", RequireRole("admin")(http.HandlerFunc(a.handleTransfers)))
 	a.mux.HandleFunc("/v1/ledger/transactions", a.handleTransactions)
+
+	// RBAC management endpoints
+	a.mux.Handle("/v1/organizations", http.HandlerFunc(a.handleOrganizations))
+	a.mux.HandleFunc("/v1/organizations/", a.handleOrganizationScoped)
+	a.mux.HandleFunc("/v1/roles/", a.handleRoleResource)
+	a.mux.HandleFunc("/v1/users/", a.handleUserResource)
 
 	// Prometheus metrics
 	a.mux.Handle("/metrics", obs.Handler())
