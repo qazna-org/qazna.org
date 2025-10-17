@@ -25,10 +25,11 @@ func Dial(ctx context.Context, target string, opts ...grpc.DialOption) (*Client,
 	if len(opts) == 0 {
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
-	conn, err := grpc.DialContext(ctx, target, opts...)
+	conn, err := grpc.NewClient(target, opts...)
 	if err != nil {
 		return nil, err
 	}
+	conn.Connect()
 	return &Client{conn: conn, svc: v1.NewLedgerServiceClient(conn)}, nil
 }
 

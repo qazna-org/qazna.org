@@ -35,15 +35,14 @@ func startBufGRPC(t *testing.T, srv *GRPCServer) (*grpc.ClientConn, func()) {
 	dialer := func(ctx context.Context, _ string) (net.Conn, error) {
 		return listener.Dial()
 	}
-	conn, err := grpc.DialContext(
-		context.Background(),
-		"bufnet",
+	conn, err := grpc.NewClient("passthrough:///bufnet",
 		grpc.WithContextDialer(dialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
 		t.Fatalf("dial bufnet: %v", err)
 	}
+	conn.Connect()
 
 	cleanup := func() {
 		server.GracefulStop()

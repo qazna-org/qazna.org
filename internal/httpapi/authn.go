@@ -89,17 +89,6 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 	}
 }
 
-func (a *API) requirePermission(perms ...string) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !a.ensurePermissions(w, r, perms...) {
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
 func (a *API) ensurePermissions(w http.ResponseWriter, r *http.Request, perms ...string) bool {
 	if len(perms) == 0 {
 		return true
