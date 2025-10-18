@@ -19,6 +19,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+RUN mkdir -p /var/lib/ledger && chown -R 65532:65532 /var/lib/ledger
+
 COPY --from=builder /workspace/core/target/release/ledgerd /usr/local/bin/ledgerd
 
 EXPOSE 9091

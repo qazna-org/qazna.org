@@ -129,6 +129,9 @@ Security contact: [security@qazna.org](mailto:security@qazna.org)
 - `make proto` — regenerate gRPC/Protobuf stubs (requires [`buf`](https://buf.build)); artifacts are written to `api/gen/go/api/proto/qazna/v1`.
 - `make test` — runs `go vet` and `go test` with the local cache, including REST and gRPC integration tests.
 - Default ports: HTTP `:8080`, gRPC `:9090` inside the container. Docker Compose maps API gRPC to `localhost:19090` and exposes the Rust ledger gRPC service on `localhost:9091`.
+- Ledger persistence: the Rust core stores state in `/var/lib/ledger/state.json` (mapped to the `ledgerd-data` Docker volume). Removing the volume resets the ledger to a clean slate.
+- Secrets: keep plaintext `.env` files local (ignored by git) and store shared credentials as SOPS-encrypted YAML under `deploy/secrets/`. Update `.sops.yaml` with your Age recipient and use `sops --decrypt` during deploys.
+- Secrets: keep plaintext `.env` files local (игнорируются git) и храните разделяемые учётные данные в зашифрованных файлах SOPS (`deploy/secrets/*.enc.yaml`). Возьмите приватный Age-ключ в `~/.config/sops/age/keys.txt`, экспортируйте `SOPS_AGE_KEY_FILE`, и используйте `sops --decrypt` / `sops --encrypt --in-place` для обновления значений.
 - UI entry points:
   - `http://localhost:8080/` — real-time global flow map.
   - `http://localhost:8080/admin/dashboard` — operational control center for administrators.

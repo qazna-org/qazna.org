@@ -1,0 +1,5 @@
+creation_rules:
+  - path_regex: deploy/secrets/.*\.ya?ml$
+    encrypted_regex: '^(data|stringData|secrets)$'
+    age:
+      - "age1vjy33ny0m37ye4k6y0g2jqvpr30ug6lcxef827v54fk3w2rrtqpsnuvtpq"

@@ -111,6 +111,7 @@ fn map_error(err: LedgerError) -> Status {
         LedgerError::InsufficientFunds => Status::failed_precondition("insufficient funds"),
         LedgerError::InvalidAmount => Status::invalid_argument("invalid amount"),
         LedgerError::InvalidCurrency => Status::invalid_argument("invalid currency"),
+        LedgerError::Storage(_) => Status::internal("ledger persistence failure"),
     }
 }
 

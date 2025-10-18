@@ -30,3 +30,8 @@ __pycache__/
 .vscode/
 *.log
 *.swp
+
+# Local env / secrets
+.env
+.env.*
+deploy/secrets/*.age

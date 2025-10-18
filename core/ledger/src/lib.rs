@@ -11,8 +11,13 @@ pub mod proto {
 }
 
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
+use std::fs;
+use std::fs::File;
+use std::io::{self, Write};
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use ulid::Ulid;
 
@@ -64,6 +69,7 @@ pub enum LedgerError {
     InsufficientFunds,
     InvalidAmount,
     InvalidCurrency,
+    Storage(String),
 }
 
 impl fmt::Display for LedgerError {
@@ -73,19 +79,20 @@ impl fmt::Display for LedgerError {
             LedgerError::InsufficientFunds => write!(f, "insufficient funds"),
             LedgerError::InvalidAmount => write!(f, "invalid amount (must be > 0)"),
             LedgerError::InvalidCurrency => write!(f, "invalid currency"),
+            LedgerError::Storage(err) => write!(f, "persistence error: {err}"),
         }
     }
 }
 
 impl std::error::Error for LedgerError {}
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 struct AccountRecord {
     created_at: DateTime<Utc>,
     balances: HashMap<String, i64>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 struct TransactionRecord {
     id: String,
     created_at: DateTime<Utc>,
@@ -97,6 +104,7 @@ struct TransactionRecord {
     sequence: u64,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
 struct State {
     accounts: HashMap<String, AccountRecord>,
     transactions: Vec<TransactionRecord>,
@@ -118,13 +126,29 @@ impl State {
 #[derive(Clone)]
 pub struct Ledger {
     inner: Arc<RwLock<State>>,
+    persistence: Option<Arc<Persistence>>,
 }
 
 impl Ledger {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(RwLock::new(State::new())),
+            persistence: None,
         }
+    }
+
+    pub fn with_persistence(path: impl Into<PathBuf>) -> Result<Self, PersistenceError> {
+        let persistence = Persistence::new(path.into())?;
+        let state = persistence.load()?.unwrap_or_else(State::new);
+        Ok(Self {
+            inner: Arc::new(RwLock::new(state)),
+            persistence: Some(Arc::new(persistence)),
+        })
+    }
+
+    pub fn is_empty(&self) -> bool {
+        let state = self.inner.read().expect("ledger lock poisoned");
+        state.accounts.is_empty()
     }
 
     pub fn create_account(&self, initial: Money) -> Result<Account, LedgerError> {
@@ -150,8 +174,15 @@ impl Ledger {
             balances,
         };
         state.accounts.insert(id.clone(), record.clone());
+        let snapshot = self.snapshot_if_persistent(&state);
 
-        Ok(to_public_account(id, &record))
+        let account = to_public_account(id, &record);
+        drop(state);
+
+        if let Some(state) = snapshot {
+            self.persist_snapshot(state)?;
+        }
+        Ok(account)
     }
 
     pub fn get_account(&self, id: &str) -> Result<Account, LedgerError> {
@@ -226,7 +257,15 @@ impl Ledger {
         }
 
         state.transactions.push(tx.clone());
-        Ok(public_transaction(&tx))
+        let snapshot = self.snapshot_if_persistent(&state);
+
+        let public = public_transaction(&tx);
+        drop(state);
+
+        if let Some(state) = snapshot {
+            self.persist_snapshot(state)?;
+        }
+        Ok(public)
     }
 
     pub fn list_transactions(
@@ -341,6 +380,26 @@ mod tests {
     }
 
     #[test]
+    fn ledger_persists_state() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("state.json");
+        let ledger = Ledger::with_persistence(&path).expect("with persistence");
+        assert!(ledger.is_empty());
+
+        let account = ledger
+            .create_account(Money::new("QZN", 500))
+            .expect("create account");
+        assert!(path.exists(), "state file should be created");
+
+        drop(ledger);
+
+        let ledger2 = Ledger::with_persistence(&path).expect("reload");
+        assert!(!ledger2.is_empty());
+        let loaded = ledger2.get_account(&account.id).expect("load account");
+        assert_eq!(loaded.balances.get("QZN"), Some(&500));
+    }
+
+    #[test]
     fn list_transactions_respects_limit() {
         let ledger = Ledger::new();
         let a = ledger.create_account(Money::new("QZN", 5000)).unwrap();
@@ -382,5 +441,96 @@ mod tests {
         let total = ledger.get_balance(&a.id, "QZN").unwrap().amount
             + ledger.get_balance(&b.id, "QZN").unwrap().amount;
         assert_eq!(total, 10_000);
+    }
+}
+
+#[derive(Clone)]
+struct Persistence {
+    path: PathBuf,
+    tmp_path: PathBuf,
+}
+
+impl Persistence {
+    fn new(path: PathBuf) -> Result<Self, PersistenceError> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let tmp_path = path.with_extension("tmp");
+        Ok(Self { path, tmp_path })
+    }
+
+    fn load(&self) -> Result<Option<State>, PersistenceError> {
+        if !self.path.exists() {
+            return Ok(None);
+        }
+        let bytes = fs::read(&self.path)?;
+        if bytes.is_empty() {
+            return Ok(None);
+        }
+        let state = serde_json::from_slice(&bytes)?;
+        Ok(Some(state))
+    }
+
+    fn store(&self, state: &State) -> Result<(), PersistenceError> {
+        let data = serde_json::to_vec(state)?;
+        {
+            let mut file = File::create(&self.tmp_path)?;
+            file.write_all(&data)?;
+            file.sync_all()?;
+        }
+        fs::rename(&self.tmp_path, &self.path)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub enum PersistenceError {
+    Io(io::Error),
+    Encode(serde_json::Error),
+}
+
+impl From<io::Error> for PersistenceError {
+    fn from(err: io::Error) -> Self {
+        PersistenceError::Io(err)
+    }
+}
+
+impl From<serde_json::Error> for PersistenceError {
+    fn from(err: serde_json::Error) -> Self {
+        PersistenceError::Encode(err)
+    }
+}
+
+impl fmt::Display for PersistenceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PersistenceError::Io(err) => write!(f, "io error: {err}"),
+            PersistenceError::Encode(err) => write!(f, "serialization error: {err}"),
+        }
+    }
+}
+
+impl std::error::Error for PersistenceError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            PersistenceError::Io(err) => Some(err),
+            PersistenceError::Encode(err) => Some(err),
+        }
+    }
+}
+
+impl Ledger {
+    fn snapshot_if_persistent(&self, state: &State) -> Option<State> {
+        self.persistence.as_ref().map(|_| state.clone())
+    }
+
+    fn persist_snapshot(&self, snapshot: State) -> Result<(), LedgerError> {
+        if let Some(persistence) = &self.persistence {
+            persistence
+                .store(&snapshot)
+                .map_err(|err| LedgerError::Storage(err.to_string()))
+        } else {
+            Ok(())
+        }
     }
 }

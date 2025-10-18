@@ -10,6 +10,8 @@ services:
       - "9091:9091"
     networks:
       - default
+    volumes:
+      - ledgerd-data:/var/lib/ledger
 
   pg:
     image: postgres:16-alpine
@@ -100,3 +102,4 @@ volumes:
   pgdata:
   promdata:
   grafana:
+  ledgerd-data:
