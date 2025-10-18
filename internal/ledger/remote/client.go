@@ -10,8 +10,10 @@ import (
 	"qazna.org/internal/ledger"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 // Client wraps the gRPC ledger service.
@@ -55,7 +57,7 @@ func (s *Service) CreateAccount(ctx context.Context, initial ledger.Money) (ledg
 		InitialAmount: initial.Amount,
 	})
 	if err != nil {
-		return ledger.Account{}, err
+		return ledger.Account{}, mapLedgerError(err)
 	}
 	return fromProtoAccount(resp), nil
 }
@@ -64,7 +66,7 @@ func (s *Service) GetAccount(ctx context.Context, id string) (ledger.Account, er
 	ctx = outgoingWithIdentity(ctx)
 	resp, err := s.client.svc.GetAccount(ctx, &v1.GetAccountRequest{Id: id})
 	if err != nil {
-		return ledger.Account{}, err
+		return ledger.Account{}, mapLedgerError(err)
 	}
 	return fromProtoAccount(resp), nil
 }
@@ -73,7 +75,7 @@ func (s *Service) GetBalance(ctx context.Context, id, currency string) (ledger.M
 	ctx = outgoingWithIdentity(ctx)
 	resp, err := s.client.svc.GetBalance(ctx, &v1.GetBalanceRequest{Id: id, Currency: currency})
 	if err != nil {
-		return ledger.Money{}, err
+		return ledger.Money{}, mapLedgerError(err)
 	}
 	return ledger.Money{Currency: resp.Currency, Amount: resp.Amount}, nil
 }
@@ -88,7 +90,7 @@ func (s *Service) Transfer(ctx context.Context, fromID, toID string, amt ledger.
 		IdempotencyKey: idemKey,
 	})
 	if err != nil {
-		return ledger.Transaction{}, err
+		return ledger.Transaction{}, mapLedgerError(err)
 	}
 	return fromProtoTransaction(resp.Transaction), nil
 }
@@ -103,7 +105,7 @@ func (s *Service) ListTransactions(ctx context.Context, limit int, afterSeq uint
 		Limit:         uint32(limit),
 	})
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, mapLedgerError(err)
 	}
 	items := make([]ledger.Transaction, 0, len(resp.Items))
 	for _, item := range resp.Items {
@@ -171,4 +173,43 @@ func WithTimeout(parent context.Context, d time.Duration) (context.Context, cont
 		d = 10 * time.Second
 	}
 	return context.WithTimeout(parent, d)
+}
+
+func mapLedgerError(err error) error {
+	if err == nil {
+		return nil
+	}
+	st, ok := status.FromError(err)
+	if !ok {
+		return err
+	}
+
+	msg := strings.ToLower(strings.TrimSpace(st.Message()))
+
+	switch st.Code() {
+	case codes.NotFound:
+		return ledger.ErrNotFound
+	case codes.InvalidArgument:
+		switch msg {
+		case strings.ToLower(ledger.ErrInvalidAmount.Error()), "invalid amount":
+			return ledger.ErrInvalidAmount
+		case strings.ToLower(ledger.ErrInvalidCurrency.Error()), "invalid currency":
+			return ledger.ErrInvalidCurrency
+		default:
+			if strings.Contains(msg, "currency") {
+				return ledger.ErrInvalidCurrency
+			}
+			if strings.Contains(msg, "amount") {
+				return ledger.ErrInvalidAmount
+			}
+			return ledger.ErrInvalidAmount
+		}
+	case codes.FailedPrecondition:
+		if strings.Contains(msg, "insufficient") {
+			return ledger.ErrInsufficientFunds
+		}
+		return ledger.ErrInsufficientFunds
+	default:
+		return err
+	}
 }

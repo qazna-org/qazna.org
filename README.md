@@ -128,7 +128,9 @@ Security contact: [security@qazna.org](mailto:security@qazna.org)
 - `cp .env.example .env` — populate required secrets (`QAZNA_POSTGRES_PASSWORD`, `QAZNA_GRAFANA_ADMIN_PASSWORD`, `QAZNA_AUTH_SECRET`) and optional `QAZNA_ALLOWED_ORIGINS` plus rate limit overrides. Docker Compose now starts the Rust ledger daemon (`ledgerd`) alongside Postgres and the API; override `QAZNA_LEDGER_GRPC_ADDR` only if you want to point the API at an external ledger cluster.
 - `make proto` — regenerate gRPC/Protobuf stubs (requires [`buf`](https://buf.build)); artifacts are written to `api/gen/go/api/proto/qazna/v1`.
 - `make test` — runs `go vet` and `go test` with the local cache, including REST and gRPC integration tests.
-- Default ports: HTTP `:8080`, gRPC `:9090` inside the container. Docker Compose maps API gRPC to `localhost:19090` and exposes the Rust ledger gRPC service on `localhost:9091`.
+- `make smoke` — end-to-end REST smoke (`/v1/accounts`, `/v1/transfers`, `/v1/ledger/transactions`) including automatic JWT issuance via `/v1/auth/token`.
+- `make smoke-ledger` — gRPC smoke against `ledgerd`; creates demo accounts and checks balances.
+- Default ports: HTTP `:8080`, gRPC `:9090` inside the container. Docker Compose maps API gRPC to `localhost:19090`, exposes the Rust ledger gRPC service on `localhost:9091`, and publishes ledger metrics on `localhost:9102`.
 - Ledger persistence: the Rust core stores state in `/var/lib/ledger/state.json` (mapped to the `ledgerd-data` Docker volume). Removing the volume resets the ledger to a clean slate.
 - Secrets: keep plaintext `.env` files local (ignored by git) and store shared credentials as SOPS-encrypted YAML under `deploy/secrets/`. Update `.sops.yaml` with your Age recipient and use `sops --decrypt` during deploys.
 - Secrets: keep plaintext `.env` files local (игнорируются git) и храните разделяемые учётные данные в зашифрованных файлах SOPS (`deploy/secrets/*.enc.yaml`). Возьмите приватный Age-ключ в `~/.config/sops/age/keys.txt`, экспортируйте `SOPS_AGE_KEY_FILE`, и используйте `sops --decrypt` / `sops --encrypt --in-place` для обновления значений.
@@ -140,6 +142,8 @@ Security contact: [security@qazna.org](mailto:security@qazna.org)
 - Observability stack:
   - `http://localhost:9090/` — Prometheus console.
   - `http://localhost:3000/` — Grafana (login `admin`, password from `QAZNA_GRAFANA_ADMIN_PASSWORD`; run `make grafana-reset` if the stored password drifts).
+  - `http://localhost:9102/` — Prometheus scrape target exposing `ledgerd` counters/gauges.
+  - Grafana dashboards include a new **Ledgerd Core** view (account growth, transfers/sec) with built-in alerts for account drops and throughput flatlines.
 - AI demo:
   - `go run ./cmd/aidemo` (or `make demo-load`) — streams synthetic sovereign transfers; set `OPENAI_API_KEY` to receive executive summaries.
 - Detailed dashboard runbook: [`docs/ui/dashboards.md`](docs/ui/dashboards.md)

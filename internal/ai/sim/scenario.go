@@ -9,6 +9,7 @@ type Account struct {
 	ID       string
 	Currency string
 	Label    string
+	Initial  int64
 }
 
 type Transfer struct {
@@ -29,9 +30,9 @@ func SovereignFlowScenario() Scenario {
 	return Scenario{
 		Name: "SovereignReserveDelta",
 		Accounts: []Account{
-			{ID: "acct-sovereign-001", Currency: "QZN", Label: "National Bank of Qazakhstan"},
-			{ID: "acct-sovereign-002", Currency: "QZN", Label: "Union Reserve Cooperative"},
-			{ID: "acct-sovereign-003", Currency: "USD", Label: "European Monetary Authority"},
+			{ID: "acct-sovereign-001", Currency: "QZN", Label: "National Bank of Qazakhstan", Initial: 10_000_000_000},
+			{ID: "acct-sovereign-002", Currency: "QZN", Label: "Union Reserve Cooperative", Initial: 7_500_000_000},
+			{ID: "acct-sovereign-003", Currency: "USD", Label: "European Monetary Authority", Initial: 2_000_000_000},
 		},
 		Narratives: []string{
 			"Intra-day rebalancing to demonstrate liquidity automation",
@@ -80,4 +81,8 @@ func (g Generator) NextTransfer() Transfer {
 
 func (g Generator) Accounts() []Account {
 	return append([]Account(nil), g.scenario.Accounts...)
+}
+
+func (g *Generator) OverrideAccounts(accounts []Account) {
+	g.scenario.Accounts = append([]Account(nil), accounts...)
 }

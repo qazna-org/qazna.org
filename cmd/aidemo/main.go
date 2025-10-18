@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -42,6 +43,9 @@ func main() {
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	generator := sim.NewGenerator(time.Now().UnixNano())
+	if err := ensureLedgerAccounts(ctx, client, *baseURL, token, &generator); err != nil {
+		log.Fatalf("bootstrap ledger accounts: %v", err)
+	}
 
 	var counter sim.Counter
 	var successes int64
@@ -164,4 +168,61 @@ func issueToken(ctx context.Context, baseURL string) (string, error) {
 		return "", errors.New("empty token returned")
 	}
 	return out.Token, nil
+}
+
+func ensureLedgerAccounts(ctx context.Context, client *http.Client, baseURL, token string, generator *sim.Generator) error {
+	desired := generator.Accounts()
+	actual := make([]sim.Account, 0, len(desired))
+	for _, acc := range desired {
+		created, err := createLedgerAccount(ctx, client, baseURL, token, acc)
+		if err != nil {
+			return fmt.Errorf("create account %s: %w", acc.Label, err)
+		}
+		actual = append(actual, created)
+		log.Printf("Provisioned ledger account %s (%s) with balance %.2f %s", created.Label, created.ID, float64(created.Initial)/100, created.Currency)
+	}
+	generator.OverrideAccounts(actual)
+	return nil
+}
+
+func createLedgerAccount(ctx context.Context, client *http.Client, baseURL, token string, spec sim.Account) (sim.Account, error) {
+	if spec.Initial < 0 {
+		spec.Initial = 0
+	}
+	body, _ := json.Marshal(map[string]any{
+		"currency":       spec.Currency,
+		"initial_amount": spec.Initial,
+	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/v1/accounts", baseURL), bytes.NewReader(body))
+	if err != nil {
+		return sim.Account{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return sim.Account{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		return sim.Account{}, fmt.Errorf("status %s: %s", resp.Status, string(bytes.TrimSpace(b)))
+	}
+	var out struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return sim.Account{}, err
+	}
+	if out.ID == "" {
+		return sim.Account{}, errors.New("empty id returned")
+	}
+	return sim.Account{
+		ID:       out.ID,
+		Currency: spec.Currency,
+		Label:    spec.Label,
+		Initial:  spec.Initial,
+	}, nil
 }

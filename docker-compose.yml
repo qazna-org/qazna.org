@@ -8,6 +8,7 @@ services:
       dockerfile: core/ledger/Dockerfile
     ports:
       - "9091:9091"
+      - "9102:9102"
     networks:
       - default
     volumes:
@@ -91,6 +92,7 @@ services:
     volumes:
       - ./ops/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - ./ops/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./ops/grafana/provisioning/alerting:/etc/grafana/provisioning/alerting:ro
       - ./ops/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana:/var/lib/grafana
     depends_on:

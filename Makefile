@@ -17,6 +17,7 @@ help:
 	@echo "  make logs          - tail api logs"
 	@echo "  make health        - GET /healthz"
 	@echo "  make smoke         - end-to-end API smoke (create accounts, transfer, list)"
+	@echo "  make smoke-ledger  - gRPC smoke test against ledgerd"
 	@echo "  make clean         - local cleanup (no docker volumes)"
 	@echo "  make tla           - run TLC on docs/tla/ledger"
 
@@ -91,14 +92,20 @@ health:
 .PHONY: smoke
 smoke:
 	@echo "Health:" && curl -s $(API_URL)/healthz | jq . ; \
-	ACC_A=$$(curl -s -X POST $(API_URL)/v1/accounts -H 'Content-Type: application/json' -d '{"currency":"QZN","initial_amount":100000}' | jq -r .id); \
-	ACC_B=$$(curl -s -X POST $(API_URL)/v1/accounts -H 'Content-Type: application/json' -d '{"currency":"QZN","initial_amount":0}' | jq -r .id); \
+	TOKEN=$$(curl -s -X POST $(API_URL)/v1/auth/token -H 'Content-Type: application/json' -d '{"user":"smoke-admin","roles":["admin"]}' | jq -r .token); \
+	if [ -z "$$TOKEN" ] || [ "$$TOKEN" = "null" ]; then echo "Failed to obtain auth token"; exit 1; fi; \
+	ACC_A=$$(curl -s -X POST $(API_URL)/v1/accounts -H 'Content-Type: application/json' -H "Authorization: Bearer $$TOKEN" -d '{"currency":"QZN","initial_amount":100000}' | jq -r .id); \
+	ACC_B=$$(curl -s -X POST $(API_URL)/v1/accounts -H 'Content-Type: application/json' -H "Authorization: Bearer $$TOKEN" -d '{"currency":"QZN","initial_amount":0}' | jq -r .id); \
 	echo "A=$$ACC_A  B=$$ACC_B"; \
 	JSON=$$(printf '{"from_id":"%s","to_id":"%s","currency":"QZN","amount":25000}' "$$ACC_A" "$$ACC_B"); \
-	curl -s -X POST $(API_URL)/v1/transfers -H 'Content-Type: application/json' -H 'Idempotency-Key: demo-1' -d "$$JSON" | jq .; \
-	echo "Account A:" && curl -s $(API_URL)/v1/accounts/$$ACC_A | jq .; \
-	echo "Balance B:" && curl -s "$(API_URL)/v1/accounts/$$ACC_B/balance?currency=QZN" | jq .; \
-	curl -s $(API_URL)/v1/ledger/transactions?limit=5 | jq .
+	curl -s -X POST $(API_URL)/v1/transfers -H 'Content-Type: application/json' -H 'Idempotency-Key: demo-1' -H "Authorization: Bearer $$TOKEN" -d "$$JSON" | jq .; \
+	echo "Account A:" && curl -s $(API_URL)/v1/accounts/$$ACC_A -H "Authorization: Bearer $$TOKEN" | jq .; \
+	echo "Balance B:" && curl -s "$(API_URL)/v1/accounts/$$ACC_B/balance?currency=QZN" -H "Authorization: Bearer $$TOKEN" | jq .; \
+	curl -s $(API_URL)/v1/ledger/transactions?limit=5 -H "Authorization: Bearer $$TOKEN" | jq .
+
+.PHONY: smoke-ledger
+smoke-ledger:
+	@go run ./cmd/smoke-ledger
 
 # ─── Misc ──────────────────────────────────────────────────────────────────────
 .PHONY: clean

@@ -24,8 +24,9 @@ RUN mkdir -p /var/lib/ledger && chown -R 65532:65532 /var/lib/ledger
 COPY --from=builder /workspace/core/target/release/ledgerd /usr/local/bin/ledgerd
 
 EXPOSE 9091
+EXPOSE 9102
 
 USER 65532:65532
 
 ENTRYPOINT ["/usr/local/bin/ledgerd"]
-CMD ["--addr", "0.0.0.0:9091"]
+CMD ["--addr", "0.0.0.0:9091", "--metrics-addr", "0.0.0.0:9102"]

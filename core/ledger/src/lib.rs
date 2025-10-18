@@ -2,6 +2,7 @@
 //! This crate provides a thread-safe state machine used by the API layer.
 
 pub mod grpc;
+pub mod metrics;
 pub mod proto {
     pub mod qazna {
         pub mod v1 {
@@ -131,19 +132,24 @@ pub struct Ledger {
 
 impl Ledger {
     pub fn new() -> Self {
-        Self {
+        let ledger = Self {
             inner: Arc::new(RwLock::new(State::new())),
             persistence: None,
-        }
+        };
+        metrics::set_account_count(0);
+        ledger
     }
 
     pub fn with_persistence(path: impl Into<PathBuf>) -> Result<Self, PersistenceError> {
         let persistence = Persistence::new(path.into())?;
         let state = persistence.load()?.unwrap_or_else(State::new);
-        Ok(Self {
+        let account_count = state.accounts.len();
+        let ledger = Self {
             inner: Arc::new(RwLock::new(state)),
             persistence: Some(Arc::new(persistence)),
-        })
+        };
+        metrics::set_account_count(account_count);
+        Ok(ledger)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -174,9 +180,11 @@ impl Ledger {
             balances,
         };
         state.accounts.insert(id.clone(), record.clone());
+        let account_count = state.accounts.len();
         let snapshot = self.snapshot_if_persistent(&state);
 
         let account = to_public_account(id, &record);
+        metrics::set_account_count(account_count);
         drop(state);
 
         if let Some(state) = snapshot {
@@ -258,6 +266,7 @@ impl Ledger {
 
         state.transactions.push(tx.clone());
         let snapshot = self.snapshot_if_persistent(&state);
+        metrics::inc_transfers(&tx.currency);
 
         let public = public_transaction(&tx);
         drop(state);
